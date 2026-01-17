@@ -1,0 +1,5 @@
+*.exe
+*.s
+*.asm
+*.o
+/.vscode
