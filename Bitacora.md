@@ -67,19 +67,25 @@ Dado que la placa tiene recursos muy limitados se necesita que la CNNs que se mo
 
 ### Justificación de las limitaciones
 
-Cada una de las limitaciones impuestas al acelerador responde a restricciones reales del hardware seleccionado, así como a criterios de eficiencia, reutilización y escalabilidad. Estas decisiones permiten implementar una arquitectura genérica, capaz de acelerar múltiples CNNs ligeras sin depender de un modelo específico, maximizando el aprovechamiento de los recursos del SoC.
+Cada una de las limitaciones antes enumeradas que se le imponen al acelerador responden a restricciones reales del hardware seleccionado, así como a criterios de eficiencia y reutilizacion. Estas decisiones van a permitir implementar una arquitectura genérica, capaz de acelerar múltiples CNNs ligeras sin depender de un modelo específico, maximizando el aprovechamiento de los recursos del SoC.
 
 ## MACRO - ARQUITECTURA
 
 ```mermaid
 flowchart TB
     %% =========================
+    %% External World
+    %% =========================
+    EXT["Scene / Plants"]
+
+    %% =========================
     %% Processing System
     %% =========================
     subgraph PS["Processing System (PS)"]
-        PS1["ARM Cortex-A9"]
-        PS2["Software CNN<br/>(Control & Scheduler)"]
-        PS3["Drivers<br/>DMA / AXI"]
+        PS1["ARM Cortex-A9<br/>(Dual-Core)"]
+        PS2["Runtime Bare-Metal<br/>(Control & Concurrency)"]
+        PS3["Drivers<br/>(AXI / DMA)"]
+
         PS1 --> PS2
         PS2 --> PS3
     end
@@ -87,32 +93,158 @@ flowchart TB
     %% =========================
     %% AXI Interconnect
     %% =========================
-    AXI["Interconexión AXI"]
+    AXIL["AXI-Lite<br/>(Control)"]
+    AXIHP["AXI-HP<br/>(High Performance Data)"]
 
     %% =========================
     %% Programmable Logic
     %% =========================
     subgraph PL["Programmable Logic (PL)"]
         PL1["MIPI CSI RX"]
-        PL2["Preprocesamiento"]
-        PL3["Acelerador CNN"]
-        PL1 --> PL2 --> PL3
+        PL2["Pre-processing"]
+        PL3["CNN Accelerator"]
+        DMA["DMA Engine"]
     end
 
     %% =========================
     %% DDR Memory
     %% =========================
     subgraph DDR["DDR3 (512 MB)"]
-        DDR1["Frames de cámara"]
+        DDR1["Camera Frames"]
         DDR2["Feature Maps"]
-        DDR3["Pesos CNN"]
+        DDR3["CNN Weights"]
     end
 
     %% =========================
     %% Connections
     %% =========================
-    PS --> AXI
-    AXI --> PL
-    PL --> DDR
-    PS --> DDR
+    EXT --> PL1
+
+    %% Capture path
+    PL1 --> DMA
+    DMA --> DDR1
+
+    %% Preprocessing path
+    DDR1 --> DMA
+    DMA --> PL2
+    PL2 --> DMA
+    DMA --> DDR2
+
+    %% CNN execution path
+    DDR2 --> DMA
+    DDR3 --> DMA
+    DMA --> PL3
+    PL3 --> DMA
+    DMA --> DDR2
+
+    %% Control paths
+    PS3 --> AXIL
+    AXIL --> PL2
+    AXIL --> PL3
+
+    PS3 --> AXIHP
+    AXIHP --> DMA
+
+    PS3 <--> DDR
+
 ```
+
+En la macro-arquitectura podemos apreciar como se van a separar distribuir las tareas entre los distintos componentes del SoC, donde tenemos todo lo que hara el Processing System (PS), la Programmable Logic (PL), la Interconexion AXI, y la memoria DDR3.
+
+### Processing System
+
+* ARM-Cortex-A9 (Dual-Core)
+
+    + Ejecuta la aplicacion principal.
+    + Maneja la logica de alto nivel.
+    + Toma desiciones ( inferencia, clasificacion, estados ).
+
+    Nos interesa aprovechar los dos nucleos del chip, ya que de esta forma podemos asignar dichas tareas de forma equivalente para que la carga no sea de una sola unidad, de esta forma:
+
+    + Core 0: control del sistema.
+    + Core 1: gestion de inferencia / comunicacion.
+
+* Runtime Bare-Metal (Control & Concurrency)
+
+    + Coordina tareas entre nucleos.
+    + Ligero para no depender de un OS completo.
+    + Control determinista del hardware.
+
+    De esta forma las tareas se podrian repartir de la siguiente manera:
+    
+    + Core 0:
+        - Configurar camara.
+        - Manejar interrupciones.
+        - Coordinar DMA.
+    + Core 1:
+        - Scheduler de la CNN.
+        - Lanzar capas al acelerador.
+        - Leer resultados.
+
+* Drivers AXI / DMA
+
+    + Abstraccion del hardware.
+    + Escritura / Lectura de los registros AXI-Lite.
+    + Configuracion de transferencia DMA.
+
+    Este bloque realmente viene a ser como el puente entre PS y PL.
+
+---
+### Interconexion AXI
+
+* AXI-Lite (Control)
+
+    + Configurar el acelerador CNN.
+    + Seleccionar tipo de capa.
+    + Direcciones base.
+    + Dimensiones.
+    + Flags start / done.
+
+* AXI-Hp (High Performance)
+
+    + Activaciones.
+    + Pesos.
+    + Feature maps.
+    + Transferencias grandes.
+
+---
+### Programmable Logic
+
+* MIPI CSI RX
+
+    + Captura continua de imagenes.
+    + Conversion a stream interno.
+
+* Pre-processsing
+
+    + Resize.
+    + Normalizacion simple.
+    + Conversion a INT8.
+    + Reordenamiento de datos.
+
+* CNN Accelerator
+
+    + Convoluciones.
+    + Depthwise.
+    + Pooling.
+    + Activacion.
+
+* DMA Engine
+
+    + Mover datos entre DDR <-> PL.
+    + Sin intervencion del CPU.
+    + Maximo throughput.
+
+---
+### DDR3 (512MB)
+
+* Frames de camara.
+* Feature maps intermedios.
+* Pesos por capa.
+
+
+Como se ha venido mencionando, el SoC Zynq-7020 cuenta con un procesador ARM Cortex-A9 de dos núcleos, debido a esto se opto por implementar un runtime bare-metal ligero que permitiera la ejecución concurrente de tareas críticas sin la sobrecarga de un sistema operativo completo.
+
+Esta decisión permite separar responsabilidades entre nucleos, reducir la latencia en la comunicación con la lógica programable, lo cual es bastante relevante en aplicaciones de inferencia en tiempo real.
+
+
