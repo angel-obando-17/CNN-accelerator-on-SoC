@@ -122,20 +122,16 @@ flowchart TB
 
     %% Capture path
     PL1 --> DMA
-    DMA --> DDR1
+    DMA <--> DDR1
 
     %% Preprocessing path
-    DDR1 --> DMA
-    DMA --> PL2
-    PL2 --> DMA
+    DMA <--> PL2
     DMA --> DDR2
 
     %% CNN execution path
-    DDR2 --> DMA
+    DDR2 <--> DMA
     DDR3 --> DMA
-    DMA --> PL3
-    PL3 --> DMA
-    DMA --> DDR2
+    DMA <--> PL3
 
     %% Control paths
     PS3 --> AXIL
