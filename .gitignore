@@ -1,5 +1,7 @@
-*.exe
 *.s
 *.asm
-*.o
 /.vscode
+*.pdf
+*.docx
+*.exe
+*.o

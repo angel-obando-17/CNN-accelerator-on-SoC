@@ -149,7 +149,7 @@ flowchart TB
 
 ```
 
-En la macro-arquitectura podemos apreciar como se van a separar distribuir las tareas entre los distintos componentes del SoC, donde tenemos todo lo que hara el Processing System (PS), la Programmable Logic (PL), la Interconexion AXI, y la memoria DDR3.
+En la macro-arquitectura podemos apreciar como se van a distribuir las tareas entre los distintos componentes del SoC, donde tenemos todo lo que hara el Processing System (PS), la Programmable Logic (PL), la Interconexion AXI, y la memoria DDR3.
 
 ### Processing System
 
@@ -243,8 +243,205 @@ En la macro-arquitectura podemos apreciar como se van a separar distribuir las t
 * Pesos por capa.
 
 
-Como se ha venido mencionando, el SoC Zynq-7020 cuenta con un procesador ARM Cortex-A9 de dos núcleos, debido a esto se opto por implementar un runtime bare-metal ligero que permitiera la ejecución concurrente de tareas críticas sin la sobrecarga de un sistema operativo completo.
+Como se ha venido mencionando, el SoC Zynq-7020 cuenta con un procesador ARM Cortex-A9 de dos núcleos, debido a esto se opto por implementar un runtime bare-metal ligero que permitiera la ejecución paralela de tareas críticas sin la sobrecarga de un sistema operativo completo.
 
 Esta decisión permite separar responsabilidades entre nucleos, reducir la latencia en la comunicación con la lógica programable, lo cual es bastante relevante en aplicaciones de inferencia en tiempo real.
 
+## BAJANDO UN NIVEL MAS PROFUNDO
 
+Para ver un mayor enfoque de que funcion cumplira cada bloque de la macro-arquitectura, necesitamos entonces ver mas a profundidad que realizara cada uno de estos:
+
+```mermaid
+
+flowchart TB
+    subgraph PS["Processing System (PS)"]
+        ARM["ARM Cortex-A9"]
+        RT["Runtime Bare-Metal"]
+        INT["Interrupt Handler"]
+        DMA_DRV["DMA Driver"]
+        CNN_DRV["CNN Driver (AXI-Lite)"]
+        MEM["DDR Memory Manager"]
+
+        ARM --> RT
+        RT --> DMA_DRV
+        RT --> CNN_DRV
+        RT --> MEM
+        DMA_DRV --> INT
+    end
+```
+
+```mermaid
+
+flowchart TB
+    subgraph DMA["DMA Engine (PL)"]
+        AXI_M["AXI Master Interface (AXI-HP)"]
+        CTRL["DMA Control FSM"]
+        RD["Read Engine"]
+        WR["Write Engine"]
+        BUF["Internal BRAM Buffer"]
+        IRQ["Interrupt Generator"]
+
+        AXI_M --> RD
+        AXI_M --> WR
+        RD --> BUF
+        BUF --> WR
+        CTRL --> RD
+        CTRL --> WR
+        CTRL --> IRQ
+    end
+```
+
+```mermaid
+
+flowchart TB
+    subgraph PRE["Pre-processing (PL)"]
+        IN_BUF["Input Buffer (BRAM)"]
+        NORM["Normalization Unit"]
+        RESHAPE["Data Formatter / Reshape"]
+        OUT_BUF["Output Buffer (BRAM)"]
+        CTRL["Control FSM"]
+
+        IN_BUF --> NORM
+        NORM --> RESHAPE
+        RESHAPE --> OUT_BUF
+        CTRL --> NORM
+        CTRL --> RESHAPE
+    end
+```
+
+```mermaid
+
+flowchart TB
+    subgraph CNN["CNN Accelerator (PL)"]
+        IN_BUF["Input Feature Buffer (BRAM)"]
+        W_BUF["Weight Buffer (BRAM)"]
+        LINE["Line Buffer"]
+        MAC["MAC Array"]
+        ACC["Accumulator"]
+        ACT["Activation (ReLU)"]
+        POOL["Pooling / GAP"]
+        OUT_BUF["Output Feature Buffer"]
+        CTRL["Control FSM"]
+
+        IN_BUF --> LINE
+        LINE --> MAC
+        W_BUF --> MAC
+        MAC --> ACC
+        ACC --> ACT
+        ACT --> POOL
+        POOL --> OUT_BUF
+
+        CTRL --> MAC
+        CTRL --> ACC
+        CTRL --> ACT
+        CTRL --> POOL
+    end
+```
+
+```mermaid
+
+flowchart LR
+    subgraph DDR["DDR3 Memory Map"]
+        FB["Frame Buffer"]
+        FM_A["Feature Map A"]
+        FM_B["Feature Map B (Ping-Pong)"]
+        W["CNN Weights"]
+        OUT["Final Output"]
+    end
+```
+
+## PIPELINE DE FRAMES
+
+Una vez que se ha visto como sera la macro-arquitectura, entonces podemos avanzar algo mas y ver el flujo del pipeline de datos:
+
+```mermaid
+
+flowchart LR
+
+    CAP["1. Captura MIPI"]
+    DDRF["2. Frame en DDR"]
+    PRE["3. Preprocesamiento (PL)"]
+    FM0["4. Feature Map Inicial"]
+    SCH["5. Scheduler (PS)"]
+    DMA_IN["6. DMA: DDR -> PL"]
+    CNN["7. Motor CNN (PL)"]
+    DMA_OUT["8. DMA: PL -> DDR"]
+    NEXT["9. Siguiente Capa"]
+    RES["10. Resultado Final"]
+
+    CAP --> DDRF
+    DDRF --> PRE
+    PRE --> FM0
+    FM0 --> SCH
+    SCH --> DMA_IN
+    DMA_IN --> CNN
+    CNN --> DMA_OUT
+    DMA_OUT --> NEXT
+    NEXT --> SCH
+    SCH --> RES
+```
+En este primer diagrama podemos observar:
+
+* Frame adquirido por la camara MIPI que se escribe en memoria.
+* Ese frame se lee de la memoria, se preprocesa, una vez sale de memoria se borra de memoria para poder liberar espacio.
+* Se reutiliza el mismo motor por capa.
+* Los resultados intermedios se van guardando en la memoria.
+* El PS actua como un scheduler, decidiendo que operacion se ejecuta en cada momento en ell acelerador, y como se usan los recursos, esto se puede ejemplificar con algo muy sencillo como lo siguiente:
+
+```C
+for( layer = 0; layer < num_layers; layer++ ) {
+    configure_parameters( layer );
+    launch_DMA_input( );
+    launch_accelerator( );
+    wait_interruption( );
+}
+```
+
+* Se define el resultado final.
+
+```mermaid
+
+flowchart LR
+
+    CFG["PS Configura Capa"]
+    WLOAD["Cargar Pesos (DDR -> BRAM)"]
+    DIN["DMA: Activaciones -> Buffer"]
+    COMP["Convolución / Depthwise / 1x1"]
+    ACT["ReLU"]
+    POOL["Pooling / GAP"]
+    DOUT["DMA: Resultado -> DDR"]
+    IRQ["Interrupción -> PS"]
+
+    CFG --> WLOAD
+    WLOAD --> DIN
+    DIN --> COMP
+    COMP --> ACT
+    ACT --> POOL
+    POOL --> DOUT
+    DOUT --> IRQ
+```
+En este diagrama podemos ver como es el pipeline interno por cada capa.
+
+* El PS no procesa datos.
+* DDR actúa como almacenamiento intermedio.
+* Hay separación clara entre:
+    + Control.
+    + Transferencia.
+    + Computación.
+
+```mermaid
+
+flowchart TB
+
+    subgraph Tiempo
+
+    T1["PS Configura DMA"]
+    T2["DMA Transfiere Datos"]
+    T3["CNN Procesa"]
+    T4["DMA Escribe Resultado"]
+    T5["PS Lanza Siguiente Capa"]
+
+    T1 --> T2 --> T3 --> T4 --> T5
+
+    end
+```
