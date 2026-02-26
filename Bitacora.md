@@ -43,10 +43,10 @@ Dado que la placa tiene recursos muy limitados se necesita que la CNNs que se mo
 
 * Limitaciones a nivel de CNN ( Capas soportadas ):
     + Conv $3$ $\times$ $3$.
-    + Conv $1$ $\times$ $1$.
+    + Pointwise $1$ $\times$ $1$.
     + Depthwise $3$ $\times$ $3$.
     + ReLU.
-    + MaxPool $2$ $\times$ $2$.
+    + Pool Layer $2$ $\times$ $2$.
     + Global Average Pool.
 * Numero maximo de canales:
     + $C_{in} \leq 64$.
@@ -55,7 +55,7 @@ Dado que la placa tiene recursos muy limitados se necesita que la CNNs que se mo
 * Precision numerica de INT8, para los acumuladores INT32 y pesos cuantizados offline.
 * Limitaciones a nivel de PL:
     + Un solo motor de convolucion, que sera reutilizado en el tiempo, dicho motor sera configurable por registros, y tendra modos Conv $3$ $\times$ $3$, Conv $1$ $\times$ $1$ y Depthwise $3$ $\times$ $3$.
-    + Paralelismo moderado usando solo 8 o 16 MACs en paralelo.
+    + Paralelismo usando solo 8 o 16 MACs en paralelo.
     + BRAM solo para line buffers, Ventana $3$ $\times$ $3$, ping-pong buffers pequeños.
     + DDR como almacenamiento principal usandose para activaciones grandes y pesos por capa.
     + Usar una camara MIPI para la captura de imagenes.
@@ -64,6 +64,25 @@ Dado que la placa tiene recursos muy limitados se necesita que la CNNs que se mo
     + RGB.
     + Normalizacion simple.
     + Todo en INT8.
+* Dataflow:
+    Cuando se habla del datafow en una CNN, estamos hablando sobre como es el flujo de datos ( input data, weights y partial sums ) atravez del hardware sobre el cual esta corriendo, buscando que haya la mayor optimizacion posible entre la memoria y los elementos de procesamiento, normalmente se tienen los tipos weight stationary, output stationary, input stationary, and row stationary.
+    + Weight Stationary: 
+    Carga los pesos en los elementos de procesamiento (PEs por sus siglas en ingles), guardandolos ahi, esto minimizando el costo de energia de leer pesos desde la memoria.
+    + Output Stationary:
+    Se centra en acumular sumas parciales dentro de los PE, lo que reduce la necesidad de leer/escribir frecuentemente sumas parciales en el buffer global.
+    + Input Stationary:
+    Mantiene las input activations estacionarias en los PE para maximizar la reutilización.
+    + Row Stationary:
+    Optimiza la eficiencia energética al maximizar la reutilización de ambas filas de datos de entrada y de filtro, a menudo considerados altamente eficientes.
+
+    Para este proyecto, se considero que la opcion mas pertinente es usar Output Stationary, esto debido a que la parte mas costosa del computa en una CNN es hacer la convolucion, por lo que es muy pertinente mantener los acumuladores en los PEs, de esta forma reduciendo la necesidad de escribir/leer del buffer global, evitando accesos a memoria de forma recurrente para almacenar los resultados de las sumas parciales.
+* Estrategia de Memoria:
+    Como se mostrara mas adelante en la macro-arquitectura del sistema, se pretende guardar weights y feature maps en la memoria RAM DDR3, pero eso implica que se cada vez que se desea procesar una nueva imagen se debe cargar completamente desde la RAM hacia el acelerador, y despues los mapas de caracteristicas resultantes vueltos a guardar en memoria, esto hace que el sistema gaste muchos ciclos escribiendo/leyendo de la memoria, generando un cuello de botella, donde el rendimiendo deja de ser el computo que se debe a realizar a nada mas que escrituras y lecturas de memorias recurrentes, para solucionar este problema se propone lo siguiente:
+    + LineBuffer en BRAM:
+    Es tecnica es muy utilizada en porcesamiento de imagenes en FPGAs, es un a estructura de memoria que utiliza los Block RAM del FPGA, diseñada para almacenar una o mas lineas horizontales de datos de video o imagenes, actuando como un puente entre los datos de entrada y los algoritmos de procesamiento paralelo, la idea de usar esta estrategia es que idealmente se pueden tener 3 LineBuffers a nivel interno, esto porque para convoluciones $3$ $\times$ $3$, se necesitan procesar los 3 pixeles de la linea actual, los 3 superiores y los 3 inferiores, de esta forma podemos ahorrarnos la necesidad de almacenar frames completos en memoria, e ir procesandolos sin tantas lecturas de memoria.
+    + Tiling Espacial:
+    El tiling espacial ( o teselado ) es una estrategia muy utilizada en graficos por computadora para dividir datos espaciales extensos en bloques rectangulares mas pequeños y manejables. Esto permite cargar, visualizar y procesar mapas complejos de forma rapiday eficiente. La idea de utilizar tiling espacial es no procesaro todas las imagenes de golpe, sino procesar por bloques de filas, de esta forma reducimos la carga en el buffer interno y podemos mantener un pipeline mucho mas estable. 
+
 
 ### Justificación de las limitaciones
 
@@ -309,28 +328,47 @@ flowchart TB
 
 flowchart TB
     subgraph CNN["CNN Accelerator (PL)"]
+
+        CTRL["Control FSM"]
+        ADDR["Address Generator"]
+
         IN_BUF["Input Feature Buffer (BRAM)"]
         W_BUF["Weight Buffer (BRAM)"]
-        LINE["Line Buffer"]
-        MAC["MAC Array"]
-        ACC["Accumulator"]
-        ACT["Activation (ReLU)"]
-        POOL["Pooling / GAP"]
-        OUT_BUF["Output Feature Buffer"]
-        CTRL["Control FSM"]
 
+        LINE["Line Buffer"]
+        WIN["Window Generator"]
+
+        MAC["MAC Array (8/16 MACs)"]
+        ACC["Accumulator Bank (8/16 x INT32)"]
+
+        RELU["ReLU"]
+        QUANT["Quantizer (Shift + Clamp INT8)"]
+
+        POOL["Pooling / GAP (Optional)"]
+
+        OUT_BUF["Output Buffer (BRAM)"]
+
+        %% Data path
         IN_BUF --> LINE
-        LINE --> MAC
+        LINE --> WIN
+        WIN --> MAC
         W_BUF --> MAC
         MAC --> ACC
-        ACC --> ACT
-        ACT --> POOL
+        ACC --> RELU
+        RELU --> QUANT
+        QUANT --> POOL
         POOL --> OUT_BUF
 
+        %% Control path
+        CTRL --> ADDR
         CTRL --> MAC
         CTRL --> ACC
-        CTRL --> ACT
+        CTRL --> QUANT
         CTRL --> POOL
+        ADDR --> IN_BUF
+        ADDR --> W_BUF
+        ADDR --> OUT_BUF
+
     end
 ```
 
@@ -356,11 +394,11 @@ flowchart LR
 
     CAP["1. Captura MIPI"]
     DDRF["2. Frame en DDR"]
-    PRE["3. Preprocesamiento (PL)"]
+    PRE["3. Pre-processing (PL)"]
     FM0["4. Feature Map Inicial"]
     SCH["5. Scheduler (PS)"]
     DMA_IN["6. DMA: DDR -> PL"]
-    CNN["7. Motor CNN (PL)"]
+    CNN["7. CNN Accelerator (PL)"]
     DMA_OUT["8. DMA: PL -> DDR"]
     NEXT["9. Siguiente Capa"]
     RES["10. Resultado Final"]
