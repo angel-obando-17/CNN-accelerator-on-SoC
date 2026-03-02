@@ -5,12 +5,13 @@ En este archivo se busca llevar un registro del proceso que se tendra para reali
 
 ---
 
-## BOARD ESCOGIDA
+## CONTEXTO Y LIMITACIONES
+
+### BOARD SELECCIONADA
 
 La board con la cual se trabajara a lo largo de este proceso, sera la *Puzhi 7020 Starlite Kit de evaluación Xilinx Zynq-7000 SoC XC7Z020 Placa de desarrollo FPGA ZYNQ 7000*, dicha placa se escogio principalmente por su costo, teniendo en cuenta que el proposito es trabajar con pequeños y medianos agricultores, no muchos cuentan con los recursos para adquirir hardware de mas capacidad, pero tambien se escogio ya que tiene un minimo de recursos para poder llevar a cabo la tarea principal que es la inferencia de redes neuronales convolucionales.
 
-
-## ESPECIFICACIONES DE LA BOARD
+### ESPECIFICACIONES DE LA BOARD
 
 * SoC Zynq 7020:
     + Arm Cortex-A9 MPCore de dos núcleos.
@@ -33,11 +34,11 @@ La board con la cual se trabajara a lo largo de este proceso, sera la *Puzhi 702
 
 La placa tiene un precio de \$432.010 mas \$102.344,36 de envio en AliExpress que fue donde se adquirio.
 
-## MODELOS DE CNN ESCOGIDAS
+### MODELOS DE CNN ESCOGIDA
 
-Como se menciono en las especificaciones de la board escogida, esta cuenta con recursos muy limitados dada las necesidades de los agricultores, teniendo en cuenta el hardware, entonces tambien se debe limitar los modelos CNN que se pueden montar en la board para que esta realice su tarea de inferencia de forma satisfactoria, por lo cual se opto por dos modelos, el primero es usando MobileNetV1.
+Como se menciono en las especificaciones de la board escogida, esta cuenta con recursos muy limitados dada las necesidades de los agricultores, teniendo en cuenta el hardware, entonces tambien se debe limitar los modelos CNN que se pueden montar en la board para que esta realice su tarea de inferencia de forma satisfactoria, por lo cual se opto por el modelo MobileNetV1.
 
-## LIMITACIONES DEL ACELERADOR
+### LIMITACIONES DEL ACELERADOR
 
 Dado que la placa tiene recursos muy limitados se necesita que la CNNs que se monten en el acelerador cumplan una serie de requisitos para que puedan ser ejecutadas de forma satisfactoria en la placa, algunas de estas fueron escogidas como diria el profe Carlos, por el criterio de Ingeniero, otras tienen una razon de ser, dichas limitaciones seran anumeradas a continuacion.
 
@@ -278,12 +279,6 @@ flowchart TB
 
 ```
 
-En la macro-arquitectura podemos apreciar como se van a distribuir las tareas entre los distintos componentes del SoC, donde tenemos todo lo que hara el Processing System (PS), la Programmable Logic (PL), la Interconexion AXI, y la memoria DDR3.
-
-## ESTRATEGIA COMPUTACIONAL
-
-Para ver un mayor enfoque de que funcion cumplira cada bloque de la macro-arquitectura, necesitamos entonces ver mas a profundidad que realizara cada uno de estos:
-
 ```mermaid
 
 flowchart TB
@@ -306,27 +301,6 @@ flowchart TB
 ```mermaid
 
 flowchart TB
-    subgraph DMA["DMA Engine (PL)"]
-        AXI_M["AXI Master Interface (AXI-HP)"]
-        CTRL["DMA Control FSM"]
-        RD["Read Engine"]
-        WR["Write Engine"]
-        BUF["Internal BRAM Buffer"]
-        IRQ["Interrupt Generator"]
-
-        AXI_M --> RD
-        AXI_M --> WR
-        RD --> BUF
-        BUF --> WR
-        CTRL --> RD
-        CTRL --> WR
-        CTRL --> IRQ
-    end
-```
-
-```mermaid
-
-flowchart TB
     subgraph PRE["Pre-processing (PL)"]
         IN_BUF["Input Buffer (BRAM)"]
         NORM["Normalization Unit"]
@@ -341,6 +315,10 @@ flowchart TB
         CTRL --> RESHAPE
     end
 ```
+
+En la macro-arquitectura podemos apreciar como se van a distribuir las tareas entre los distintos componentes del SoC, donde tenemos todo lo que hara el Processing System (PS), la Programmable Logic (PL), la Interconexion AXI, y la memoria DDR3.
+
+## ARQUITECTURA INTERNA DEL CNN ACCELERATOR
 
 ```mermaid
 flowchart TB
@@ -472,7 +450,7 @@ Para las convoluciones $3$ $\times$ $3$, es decir conv normales y DepthWise, ent
 
 Despues tenemos el bloque de [Window Generator] el cual recibe las filas que armo el [Line Buffer] y lo entrega como una ventana de $3$ $\times$ $3$, es decir, el [Line Buffer] unicamente guardar las filas, pero para que los MACs puedan entender con que pixel trabajaran, entonces necesitan la ventana exacta con la cual trabajaran, de esto se encargar el [Window Generator].
 
-Esto que se explico es para los modos $3$ $\times$ $3$, para el cado de las conv $1$ $\times$ $1$ no necesitamos ventanas, unicamente necesitamos los pesos de un pixel $(x, y)$ en cada feature map que esta entrando en la capa, entonces lo que sucedera es que el [Address Generator] fijara el pixel $(x, y)$ al cual se esta haciendo convolucion en este momento, y entregara todas las activaciones de cada feature map en ese pixel y esos valores pasan directos al MAC, por eso el [Input Buffer] que es quien tiene todas las activaciones de los feature maps esta conectado directamente al mux.
+Esto que se explico es para los modos $3$ $\times$ $3$, para el caso de las conv $1$ $\times$ $1$ no necesitamos ventanas, unicamente necesitamos los pesos de un pixel $(x, y)$ en cada feature map que esta entrando en la capa, entonces lo que sucedera es que el [Address Generator] fijara el pixel $(x, y)$ al cual se esta haciendo convolucion en este momento, y entregara todas las activaciones de cada feature map en ese pixel y esos valores pasan directos al MAC, por eso el [Input Buffer] que es quien tiene todas las activaciones de los feature maps esta conectado directamente al mux.
 
 Hablando del Mux, este bloque [Input Mux] es simplemente un multiplexor que dejara pasar las ventas que genero el [Window Generator] o las activaciones que vienen directo del [Input Buffer], dependiendo del modo de convolucion que se este operando, sera la FSM quien generara la señal que escoge a quien debe dejar pasar.
 
@@ -482,6 +460,14 @@ Siguiendo tenemos el [Weight Buffer] que es simplemente parte de la BRAM donde s
 * A que canal corresponde hacer convolucion ese peso del filtro.
 
 Tenemos el [MAC Array] el cual es un arreglo de 16 MACS que trabajaran en paralelo dependiendo del modo en el cual este el acelerador en ese momento, cada MAC realiza la operacion de convolucion de un kernel con su respectivo canal en caso de DepthWise $3$ $\times$ $3$, de esta forma estamos usando un MAC por canal, o haciendo paralelismo sobre canales, para este caso cada MAC debera realizar $3$ $\times$ $3$ $\times$ $1$ multiplicaciones, sumar el resultado de esas multiplicaciones y guardarlas en su respectivo acumulador que esta en el bloque de [Accumulator Bank]. En caso de conv $3$ $\times$ $3$ normal, entonces los MACs se usan de forma que hacemos paralelismo sobre $C_{out}$, es decir como en convoluciones normales, los filtros se aplican sobre todos los canales de entrada entonces podemos hacer que cada MAC haga las operaciones correspondientes para cada filtro, en este caso los filtros/kernels no son realmente $3$ $\times$ $3$, sino mas bien $3$ $\times$ $3$ $\times$ $C_{in}$, ya que el kernel debe tener progundidad igual al numero de canales de entrada, por lo tanto no tiene solo $9$ pesos sino $3$ $\times$ $3$ $\times$ $C_{in}$, por lo que para este modo, cada MAC tambien debe realizar $3$ $\times$ $3$ $\times$ $C_{in}$ multiplicaciones, luego como ya se explico, sumar el resultado de estas multiplicaciones y guardarlas en sus respectivo acumulador del [Accumulator Bank], escencialmente se propone tener tantos acumuladores como MACs en el array, ya que asi cada MAC tiene un acumulador siempre disponible para su uso.
+
+En el [Accumulator Bank] como ya se explico, simplemente se guarda el resultado de cada una de las convoluciones hechas previamente por cada uno de los MACs.
+
+[ReLU], [Quant] y [Pool] son simplemente bloque de post-procesamiento, [ReLU] es la funcion de activacion, [Quant] se encarga de cuantizar el valor final en INT8 y [Pool] es un bloque opcional dependiendo de la capa, el cual se encarga de reducir la dimensionalidad del feature map obtenido.
+
+[Output Buffer] es nuevamente parte de BRAM donde se guarda el feature map ya procesado, el [Address Generator] se encarga de decirle en que direccion debe guardar el Feature Map.
+
+Una vez entendidos todos los bloques, el flujo para una convolucion $3$ $\times$ $3$ es el siguiente:
 
 ```mermaid
 flowchart LR
@@ -509,6 +495,34 @@ flowchart LR
 
 ```mermaid
 flowchart LR
+    DDR_IN["DDR3\nFeature Maps (entrada)"]
+    DMA_IN["DMA\n(DDR → BRAM)"]
+    IN_BUF["Input Feature Buffer\n(BRAM)"]
+    LINE["Line Buffer\n(3x3 mode)"]
+    WIN["Window Generator\n(3x3 mode)"]
+    MUX["Input MUX\n(Spatial / Direct)"]
+    W_BUF["Weight Buffer\n(BRAM)"]
+    MAC["MAC Array\n(16 PEs)"]
+    ACC["Accumulator Bank\n(16 x INT32)"]
+    RELU["ReLU"]
+    QUANT["Quantizer\n(INT8)"]
+    POOL["Pooling / GAP\n(Opcional)"]
+    OUT_BUF["Output Buffer\n(BRAM)"]
+    DMA_OUT["DMA\n(BRAM → DDR)"]
+    DDR_OUT["DDR3\nFeature Maps (salida)"]
+
+    DDR_IN --> DMA_IN --> IN_BUF
+    IN_BUF --> LINE --> WIN --> MUX
+    IN_BUF --> MUX
+    W_BUF --> MAC
+    MUX --> MAC --> ACC --> RELU --> QUANT --> POOL --> OUT_BUF
+    OUT_BUF --> DMA_OUT --> DDR_OUT
+```
+
+Para el caso de conv 1×1, el flujo simplificado es:
+
+```mermaid
+flowchart LR
 
     IN_BUF["Input Feature Buffer (BRAM)"]
     PIXEL["Pixel (x,y) - todos Cin"]
@@ -522,11 +536,78 @@ flowchart LR
     ACC --> OUT_BUF
 ```
 
-En el [Accumulator Bank] como ya se explico, simplemente se guarda el resultado de cada una de las convoluciones hechas previamente por cada uno de los MACs.
+```mermaid
+flowchart TB
 
-[ReLU], [Quant] y [Pool] son simplemente bloque de post-procesamiento, [ReLU] es la funcion de activacion, [Quant] se encarga de cuantizar el valor final en INT8 y [Pool] es un bloque opcional dependiendo de la capa, el cual se encarga de reducir la dimensionalidad del feature map obtenido.
+    subgraph FASE1["Fase 1: Depthwise 3x3"]
+        DDR_IN["DDR3 Feature Maps (entrada)"]
+        DMA_IN["DMA (DDR → BRAM)"]
+        IN_BUF["Input Feature Buffer (BRAM)"]
+        LINE["Line Buffer"]
+        WIN["Window Generator"]
+        MUX1["Input MUX (Spatial)"]
+        W_DW["Weight Buffer DW (BRAM)"]
+        MAC1["MAC Array (16 PEs) - Paralelismo sobre Cin"]
+        ACC1["Accumulator Bank"]
+        RELU1["ReLU"]
+        QUANT1["Quantizer (INT8)"]
+        OUT_BUF["Output Buffer (BRAM) ← resultado DW por tile"]
 
-[Output Buffer] es nuevamente parte de BRAM donde se guarda el feature map ya procesado, el [Address Generator] se encarga de decirle en que direccion debe guardar el Feature Map.
+        DDR_IN --> DMA_IN --> IN_BUF
+        IN_BUF --> LINE --> WIN --> MUX1
+        W_DW --> MAC1
+        MUX1 --> MAC1 --> ACC1 --> RELU1 --> QUANT1 --> OUT_BUF
+    end
+
+    subgraph FSM_CTRL["FSM Control"]
+        NOTE["Tile DW completo → FSM cambia modo a PW → Redirige lectura: OUT_BUF actúa como IN_BUF Sin DMA, sin DDR"]
+    end
+
+    subgraph FASE2["Fase 2: Pointwise 1x1"]
+        MUX2["Input MUX (Direct - 1x1)"]
+        W_PW["Weight Buffer PW (BRAM) (recargado por DMA)"]
+        MAC2["MAC Array (16 PEs) - Paralelismo sobre Cout"]
+        ACC2["Accumulator Bank"]
+        RELU2["ReLU"]
+        QUANT2["Quantizer (INT8)"]
+        POOL2["Pooling / GAP (Opcional)"]
+        OUT_BUF2["Output Buffer (BRAM) ← resultado PW"]
+        DMA_OUT["DMA (BRAM → DDR)"]
+        DDR_OUT["DDR3\nFeature Maps (salida)"]
+
+        MUX2 --> MAC2 --> ACC2 --> RELU2 --> QUANT2 --> POOL2 --> OUT_BUF2
+        W_PW --> MAC2
+        OUT_BUF2 --> DMA_OUT --> DDR_OUT
+    end
+
+    OUT_BUF -->|"Lectura directa (puntero FSM)"| MUX2
+    FASE1 --> FSM_CTRL --> FASE2
+```
+
+## ESTRATEGIA DE MEMORIA
+
+Para ver un mayor enfoque de que funcion cumplira cada bloque de la macro-arquitectura, necesitamos entonces ver mas a profundidad que realizara cada uno de estos:
+
+```mermaid
+
+flowchart TB
+    subgraph DMA["DMA Engine (PL)"]
+        AXI_M["AXI Master Interface (AXI-HP)"]
+        CTRL["DMA Control FSM"]
+        RD["Read Engine"]
+        WR["Write Engine"]
+        BUF["Internal BRAM Buffer"]
+        IRQ["Interrupt Generator"]
+
+        AXI_M --> RD
+        AXI_M --> WR
+        RD --> BUF
+        BUF --> WR
+        CTRL --> RD
+        CTRL --> WR
+        CTRL --> IRQ
+    end
+```
 
 Una vez comprendido que realizara cada bloque en esta seccion entonces se debe explicar la estrategia de carga y gestion de pesos, como se mostro inicialmente, los pesos de cada capa estaran originalmente almacenados en la DDR por lo que debemos traerlos a BRAM para poder trabajar con ellos sin leer de forma recurrente en memoria, para esto, antes de iniciar el procesamiento de una capa:
 
@@ -579,8 +660,6 @@ flowchart TB
     TILE1 --> TILE2
 ```
 
-
-
 ```mermaid
 
 flowchart LR
@@ -593,11 +672,27 @@ flowchart LR
     end
 ```
 
+Dado que la BRAM es el recurso más crítico del diseño, es necesario verificar que la suma de todos los buffers internos del acelerador no exceda la capacidad disponible del SoC. A continuacion se presenta el consumo estimado de BRAM para el peor caso, es decir, con $C_{in}$ $=$ $C_{out}$ $=$ $64$ y tiles de $96$ $\times$ $16$.
+
+| Buffer | Cálculo | Tamaño estimado |
+|---|---|---|
+| LineBuffers (3 líneas × 96 píxeles × 64 canales × 1B) | $3 \times 96 \times 64$ | ~18 KB |
+| Input Feature Buffer (tile 96×16×64) | $96 \times 16 \times 64$ | ~96 KB |
+| Weight Buffer (peor caso Pointwise 64×64) | $64 \times 64$ | ~4 KB |
+| Output Buffer (tile 96×16×64, reutilizado DW→PW) | $96 \times 16 \times 64$ | ~96 KB |
+| Window Buffer (ventana 3×3 × 64 canales) | $9 \times 64$ | < 1 KB |
+| **Total** | | **~214 KB** |
+
+La Zynq-7020 dispone de 4.9 Mb de BRAM, por lo que el consumo estimado representa aproximadamente el $4.3\%$ del total disponible. Este margen amplio valida las decisiones de diseño tomadas y además deja espacio suficiente para los buffers internos del DMA Engine y el bloque de Pre-processing, sin comprometer la disponibilidad de BRAM para otros bloques de la PL.
+
+Vale la pena resaltar que el [Output Buffer] cumple una doble función: 
+* Almacena el resultado del Depthwise y actúa como [Input Buffer] del Pointwise en el flujo fusionado DW→PW. Esto elimina la necesidad de un buffer intermedio dedicado, ahorrando aproximadamente 96 KB adicionales de BRAM respecto a una implementación naive con buffers separados.
+
 ## PIPELINE DE FRAMES
 
 Una vez que se ha visto como sera la macro-arquitectura, entonces podemos avanzar algo mas y ver el flujo del pipeline de datos:
 
-```mermaid
+```mermaids
 
 flowchart LR
 
