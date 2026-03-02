@@ -692,7 +692,7 @@ Vale la pena resaltar que el [Output Buffer] cumple una doble función:
 
 Una vez que se ha visto como sera la macro-arquitectura, entonces podemos avanzar algo mas y ver el flujo del pipeline de datos:
 
-```mermaids
+```mermaid
 
 flowchart LR
 
