@@ -683,7 +683,7 @@ Dado que la BRAM es el recurso más crítico del diseño, es necesario verificar
 | Window Buffer (ventana 3×3 × 64 canales) | $9 \times 64$ | < 1 KB |
 | **Total** | | **~214 KB** |
 
-La Zynq-7020 dispone de 4.9 Mb de BRAM, por lo que el consumo estimado representa aproximadamente el $4.3\%$ del total disponible. Este margen amplio valida las decisiones de diseño tomadas y además deja espacio suficiente para los buffers internos del DMA Engine y el bloque de Pre-processing, sin comprometer la disponibilidad de BRAM para otros bloques de la PL.
+La Zynq-7020 dispone de 4.9 Mb de BRAM eso es aproximadamente $612.5 KB$, por lo que el consumo estimado representa aproximadamente el $34.9 \%$ del total disponible. Este margen amplio valida las decisiones de diseño tomadas y además deja espacio suficiente para los buffers internos del DMA Engine y el bloque de Pre-processing, sin comprometer la disponibilidad de BRAM para otros bloques de la PL.
 
 Vale la pena resaltar que el [Output Buffer] cumple una doble función: 
 * Almacena el resultado del Depthwise y actúa como [Input Buffer] del Pointwise en el flujo fusionado DW→PW. Esto elimina la necesidad de un buffer intermedio dedicado, ahorrando aproximadamente 96 KB adicionales de BRAM respecto a una implementación naive con buffers separados.
