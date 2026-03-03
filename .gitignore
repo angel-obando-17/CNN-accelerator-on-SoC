@@ -3,8 +3,12 @@
 
 
 /.vscode
+/CNN/PlantVillage
 
 *.pdf
 *.docx
 *.exe
 *.o
+
+*.keras
+*.tflite
