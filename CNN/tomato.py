@@ -32,8 +32,8 @@ warnings.filterwarnings("ignore")
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-DATASET_ROOT = "/mnt/c/Users/ANGEL OBANDO/Documents/Trabajo de grado/CNN/PlantVillage"
-OUTPUT_DIR   = "resultados_experimentos"
+DATASET_ROOT = "/mnt/c/Users/ANGEL OBANDO/Documents/Trabajo de grado/CNN/PlantVillage_segmentado"
+OUTPUT_DIR   = "resultados_experimentos_2"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 RESOLUTIONS = [256, 128, 96]
@@ -130,7 +130,7 @@ def load_and_preprocess(path, label, target_size):
         img = cv2.imread(p)
         if img is None:
             img = np.zeros((sz, sz, 3), dtype=np.uint8)
-        img = segment_leaf(img)
+        # img = segment_leaf(img)
         img = cv2.resize(img, (sz, sz))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         return img.astype(np.float32) / 255.0
@@ -333,7 +333,7 @@ def quantize_and_evaluate(model, paths_test, labels_test, class_names,
         img = cv2.imread(paths_test[i])
         if img is None:
             y_pred.append(0); continue
-        img = segment_leaf(img)
+        # img = segment_leaf(img)
         img = cv2.resize(img, (target_size, target_size))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         y_pred.append(run_one(img))

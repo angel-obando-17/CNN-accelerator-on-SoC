@@ -116,7 +116,7 @@ Para la tercer etapa y ultima etapa de entrenamiento donde se uso las imagenes c
 
 Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
 
-* Conversion de parametros a INT8: $41.845s$ s.
+* Conversion de parametros a INT8: $41.845$ s.
 * Tamaño del modelo en INT8: $120.7$ KB.
 * Accuracy int8: $0.7120$.
 * Confussion Matrix:
@@ -128,7 +128,19 @@ Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fuero
 * Tamaño del modelo en INT8: $141.8$ KB.
 * Accuracy int16: $0.7380$.
 * Confussion Matrix:
-![ Confussion Matrix $96$ $\times$ $96$ (int8) ]( resultados_experimentos/cm_96x96_int16.png )
+![ Confussion Matrix $96$ $\times$ $96$ (int16) ]( resultados_experimentos/cm_96x96_int16.png )
+
+| Resolucion | Tiempo de Entrenamiento ( s ) | Cuantizacion | Accuracy | Inferencia ( ms / img ) | Tamaño del modelo ( kB ) | Tiempo de conversion ( s ) |
+|---|---|---|---|---|---|---|
+| $256$ $\times$ $256$ | $8254.509$ | float32 | $0.831852$ | $86.3717$ | $1112.441$ | No aplica |
+| $256$ $\times$ $256$ | $8254.509$ | INT8 | $0.826000$ | $215.9530$ | $120.773$ | $48.9533$ |
+| $256$ $\times$ $256$ | $8254.509$ | INT16 | $0.844000$ | $269.4384$ | $141.882$ | $95.2697$ |
+| $128$ $\times$ $128$ | $8052.963$ | float32 | $0.679259$ | $67.2693$ | $1112.293$ | No aplica |
+| $128$ $\times$ $128$ | $8052.963$ | INT8 | $0.690000$ | $203.0800$ | $120.773$ | $42.9797$ |
+| $128$ $\times$ $128$ | $8052.963$ | INT16 | $0.668000$ | $211.4232$ | $141.882$ | $82.2065$ |
+| $96$ $\times$ $96$ | $7811.027$ | float32 | $0.727407$ | $73.2562$ | $1112.286$ | No aplica |
+| $96$ $\times$ $96$ | $7811.027$ | INT8 | $0.712000$ | $196.1463$ | $120.656$ | $41.8454$ |
+| $96$ $\times$ $96$ | $7811.027$ | INT16 | $0.738000$ | $214.6988$ | $141.7656$ | $81.6804$ |
 
 ## CORRECIONES REALIZADAS
 
@@ -148,6 +160,103 @@ El script utilizado para este paso fue el llamado "u_net_segmentation.py", despu
 
 ![ Segmentacion realizada con grabCut ]( resultados_experimentos/segmentacion/segmentacion_muestras.png )
 
-Como se puede ver, los resultados que se obtienen son mucho mejores que los que nos devuelve el metodo de grabCut, ahora con este nuevo dataset de imagenes bien segmentadas, se procedio a realizar un nuevo entrenamiento de la CNN, repitiendo los mismos pasos que en el primer entrenamiento, pero usando este nuevo dataset, los resultados que se obtuvieron fueron los siguientes:
+Como se puede ver, los resultados que se obtienen son mucho mejores que los que nos devuelve el metodo de grabCut, ahora con este nuevo dataset de imagenes mejor segmentadas, se procedio a realizar un nuevo entrenamiento de la CNN, repitiendo los mismos pasos que en el primer entrenamiento, pero usando este nuevo dataset, los resultados que se obtuvieron fueron los siguientes:
 
 ### Segundo Entrenamiento
+
+
+#### RESOLUCION 256
+
+Para la primer etapa de este segundo entrenamiento, se siguio el mismo esquema que para el primer entrenamiento, donde la primer fase del entrenamiento fue con las imagenes en su resolucion original de $256$ $\times$ $256$, donde se obtuvieron los siguientes resultados:
+
+* Indexado de archivos:  $0.124$ s.
+* Total de $9000$ imagenes | $9$ clases.
+* [ Train $=$ $6300$,  Val $=$ $1350$,  Test $=$ $1350$ ].
+* Entrenamiento: $869.452$ s.
+![ Accuracy vs Loss in Training ]( resultados_experimentos_2/training_256x256.png )
+* Accuracy: $0.8859$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (float32) ]( resultados_experimentos_2/cm_256x256_float32.png )
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $35.354$ s.
+* Tamaño del modelo en INT8: $120.8$ KB.
+* Accuracy int8: $0.9120$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (int8) ]( resultados_experimentos_2/cm_256x256_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $67.825$ s.
+* Tamaño del modelo en INT8: $141.9$ KB.
+* Accuracy int16: $0.8980$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (int16) ]( resultados_experimentos_2/cm_256x256_int16.png )
+
+#### RESOLUCION 128
+
+Para la segunda etapa de entrenamiento donde se uso las imagenes con un reescalado a $128$ $\times$ $128$, los resultados obtenidos fueron los siguientes:
+
+* Entrenamiento: $531.974$ s.
+![ Accuracy vs Loss in Training ]( resultados_experimentos_2/training_128x128.png )
+* Accuracy: $0.7030$.
+* Tiempo de evaluacion: $26.070$ s.
+* Confussion Matrix:
+![ Confussion Matrix $128$ $\times$ $128$ (float32) ]( resultados_experimentos_2/cm_128x128_float32.png )
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $31.813$ s.
+* Tamaño del modelo en INT8: $120.8$ KB.
+* Accuracy int8: $0.7060$.
+* Confussion Matrix:
+![ Confussion Matrix $128$ $\times$ $128$ (int8) ]( resultados_experimentos_2/cm_128x128_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $58.952$ s.
+* Tamaño del modelo en INT8: $141.9$ KB.
+* Accuracy int16: $0.7100$.
+* Confussion Matrix:
+![ Confussion Matrix $128$ $\times$ $128$ (int16 ]( resultados_experimentos_2/cm_128x128_int16.png )
+
+#### RESOLUCION 96
+
+Para la tercer etapa y ultima etapa de entrenamiento donde se uso las imagenes con un reescalado a $96$ $\times$ $96$, los resultados obtenidos fueron los siguientes:
+
+* Entrenamiento: $534.569$ s.
+![ Accuracy vs Loss in Training ]( resultados_experimentos_2/training_96x96.png    )
+* Accuracy: $0.7622$.
+* Tiempo de evaluacion: $26.955$ s.
+* Confussion Matrix:
+![ Confussion Matrix $96$ $\times$ $96$ (float32) ]( resultados_experimentos_2/cm_96x96_float32.png )
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $30.056$ s.
+* Tamaño del modelo en INT8: $120.7$ KB.
+* Accuracy int8: $0.7580$.
+* Confussion Matrix:
+![ Confussion Matrix $96$ $\times$ $96$ (int8) ]( resultados_experimentos_2/cm_96x96_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $59.788$ s.
+* Tamaño del modelo en INT8: $141.8$ KB.
+* Accuracy int16: $0.7460$.
+* Confussion Matrix:
+![ Confussion Matrix $96$ $\times$ $96$ (int16) ]( resultados_experimentos_2/cm_96x96_int16.png )
+
+| Resolucion | Tiempo de Entrenamiento ( s ) | Cuantizacion | Accuracy | Inferencia ( ms / img ) | Tamaño del modelo ( kB ) | Tiempo de conversion ( s ) |
+|---|---|---|---|---|---|---|
+| $256$ $\times$ $256$ | $869.451$ | float32 | $0.885926$ | $84.4405$ | $1112.440$ | No aplica |
+| $256$ $\times$ $256$ | $869.451$ | INT8 | $0.912000$ | $8.3475$ | $120.773$ | $35.3539$ |
+| $256$ $\times$ $256$ | $869.451$ | INT16 | $0.898000$ | $69.4544$ | $141.882$ | $67.8251$ |
+| $128$ $\times$ $128$ | $531.974$ | float32 | $0.702963$ | $71.8072$ | $1112.294$ | No aplica |
+| $128$ $\times$ $128$ | $531.974$ | INT8 | $0.706000$ | $6.7789$ | $120.773$ | $31.8126$ |
+| $128$ $\times$ $128$ | $531.974$ | INT16 | $0.710000$ | $23.8390$ | $141.882$ | $58.9521$ |
+| $96$ $\times$ $96$ | $534.568$ | float32 | $0.762222$ | $77.8624$ | $1112.286$ | No aplica |
+| $96$ $\times$ $96$ | $534.568$ | INT8 | $0.758000$ | $6.3367$ | $120.656$ | $30.0562$ |
+| $96$ $\times$ $96$ | $534.568$ | INT16 | $0.746000$ | $19.5924$ | $141.765$ | $59.7883$ |
+
