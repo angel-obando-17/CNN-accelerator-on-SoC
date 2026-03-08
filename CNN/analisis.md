@@ -43,7 +43,7 @@ En cuanto al modelo CNN implementado, como ya se menciono anteriormente, se util
 
 Tambien se implemento un sistema que midiera el tiempo que se tardo en cada etapa del proceso, desde que se cargaron las imagenes, segmentado las imagenes, entrenando el modelo, realizando las pruebas de validacion y tambien calculando el tiempo que le tomo cuantizar los parametros del modelo.
 
-## RESULTADOS
+## PRIMEROS RESULTADOS
 
 ### Primer entrenamiento
 
@@ -129,3 +129,25 @@ Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fuero
 * Accuracy int16: $0.7380$.
 * Confussion Matrix:
 ![ Confussion Matrix $96$ $\times$ $96$ (int8) ]( resultados_experimentos/cm_96x96_int16.png )
+
+## CORRECIONES REALIZADAS
+
+Despues de haber entrenado el modelo por primera vez, se observo que el mejor accuracy obtenido fue cuando se entreno el modelo con las dimensiones originales de las imagenes y cuantizando a INT16, el accuracy que se obtuvo fue de $0.8440$, lo cual fue un buen punto de partida, a partir de aqui se tomaron desiciones respecto a como mejorar este accuracy obtenido, y buscar subirlo lo mayor posible.
+
+Para el primer entrenamiento realizado, se escogio como modelo de segmentacion el metodo grabCut de openCV, este metodo aunque muy rapido, cometio muchos errores a la hora de segmentar algunas imagenes, ya que o les recortaba parte de la hoja, por lo tanto las dejaba incompletas o sino, les agreagaba sombra como si fueran parte de la hoja, haciendo que el modelo aprendiera patrones que no eran correctos debido a la forma en la cual estaban siendo segmentadas.
+
+![ Segmentacion realizada con grabCut ]( resultados_experimentos/imagenes_segmentadas/00_mosaic_overview.png )
+
+Para poder resolver este problema se tomo la desicion de tomar una muestra aleatoria de cada clase, y realizar el proceso de segmentacion de manera manual, para esto se uso la herramienta open-source labelme, con la cual se realizaron las mascaras de una muestra por clase, por lo que se obtuvieron 9 mascaras.
+
+![ Segmentacion realizada con grabCut ]( resultados_experimentos/segmentacion/mascaras_manuales.png )
+
+Con las 9 mascaras ya obtenidas se procedio a entrenar un modelo de CNN pequeño llamado U-Net el cual esta desarrollado para la segmentacion de imagenes. La red se basa en una red neuronal completamente convolucional cuya arquitectura se modificó y amplió para funcionar con menos imágenes de entrenamiento y lograr una segmentación más precisa.
+
+El script utilizado para este paso fue el llamado "u_net_segmentation.py", despues de entrenarla con las 9 mascaras obtenidas de forma manual, se utilizo para segmentar todas las imagenes del dataset, por lo que se obtuvieron 9000 imagenes segmentadas de manera mas precisa que usando el metodo de grabCut, a continuacion se muestran unas muestras de esta segmentacion realizada por la red neuronal.
+
+![ Segmentacion realizada con grabCut ]( resultados_experimentos/segmentacion/segmentacion_muestras.png )
+
+Como se puede ver, los resultados que se obtienen son mucho mejores que los que nos devuelve el metodo de grabCut, ahora con este nuevo dataset de imagenes bien segmentadas, se procedio a realizar un nuevo entrenamiento de la CNN, repitiendo los mismos pasos que en el primer entrenamiento, pero usando este nuevo dataset, los resultados que se obtuvieron fueron los siguientes:
+
+### Segundo Entrenamiento
