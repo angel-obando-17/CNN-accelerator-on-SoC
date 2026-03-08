@@ -1,18 +1,19 @@
 *.s
 *.asm
+*.exe
+*.o
 
 /.vscode
 /CNN/PlantVillage
 /CNN/PlantVillage_segmentado
 /CNN/resultados_experimentos/segmentacion/pares
-/runtime-bare-metal/.vscode
-
+/runtime_bare_metal/.vscode
+/CNN/evaluate.py
 
 *.pdf
 *.docx
 *.txt
-*.exe
-*.o
+*.csv
 
 *.keras
 *.tflite
