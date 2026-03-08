@@ -8,11 +8,6 @@ Este script hace 3 cosas en orden:
   2. Augmenta Tomato_Leaf_Mold de 952 → 1000 imágenes con transformaciones leves
   3. Balancea todas las demás clases a exactamente 1000 imágenes
      (elimina muestras aleatorias de las que tienen más de 1000)
-
-INSTRUCCIONES:
-  - Ajusta DATASET_ROOT con la ruta a tu carpeta del dataset
-  - Corre: python prepare_dataset.py
-  - Al final imprime un resumen de cuántas imágenes quedó cada clase
 =============================================================================
 """
 

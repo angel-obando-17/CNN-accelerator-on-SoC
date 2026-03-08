@@ -1,10 +1,12 @@
 *.s
 *.asm
 
-
 /.vscode
 /CNN/PlantVillage
+/CNN/PlantVillage_segmentado
+/CNN/resultados_experimentos/segmentacion/pares
 /runtime-bare-metal/.vscode
+
 
 *.pdf
 *.docx

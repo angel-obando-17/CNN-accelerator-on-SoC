@@ -7,9 +7,6 @@ Script INDEPENDIENTE — corre esto DESPUÉS de que termine el entrenamiento.
 Guarda para cada clase de tomate:
   - Una cuadrícula de N imágenes: original | segmentada | diferencia
   - Las imágenes segmentadas individuales (opcional, ver SAVE_INDIVIDUALS)
-
-Ajusta las variables DATASET_ROOT y OUTPUT_DIR para que coincidan
-con las que usaste en tomato_cnn_experiments.py
 =============================================================================
 """
 

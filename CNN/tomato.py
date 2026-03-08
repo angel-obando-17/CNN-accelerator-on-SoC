@@ -5,10 +5,6 @@ Trabajo de Grado - Acelerador CNN en Zynq-7020
 =============================================================================
 VERSIÓN 2 — Usa tf.data con generador para no explotar la RAM.
 Corre DESPUÉS de haber ejecutado prepare_dataset.py
-
-INSTRUCCIONES:
-  1. Ajusta DATASET_ROOT con la ruta a tu carpeta del dataset
-  2. Corre: python tomato_cnn_experiments.py
 =============================================================================
 """
 
