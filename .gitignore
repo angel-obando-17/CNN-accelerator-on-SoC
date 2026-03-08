@@ -4,6 +4,7 @@
 
 /.vscode
 /CNN/PlantVillage
+/runtime-bare-metal/.vscode
 
 *.pdf
 *.docx

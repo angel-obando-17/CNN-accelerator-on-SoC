@@ -369,14 +369,14 @@ def analyze_viability(df):
     if not t.empty:
         acc = t["accuracy"].values[0]
         ok  = acc >= TARGET_ACC
-        print(f"    Accuracy: {acc:.4f}  {'✅ VIABLE' if ok else '❌ NO cumple'}")
+        print(f"    Accuracy: {acc:.4f}  {'    VIABLE' if ok else '    NO cumple'}")
         if not ok:
             print("    Alternativas:")
             for res, q in [("96x96","int16"),("128x128","int8"),("128x128","int16")]:
                 row = df_c[(df_c["resolution"]==res)&(df_c["quant"]==q)]
                 if not row.empty:
                     a = row["accuracy"].values[0]
-                    print(f"      {res} {q.upper()}: {a:.4f}  {'✅' if a>=TARGET_ACC else '❌'}")
+                    print(f"      {res} {q.upper()}: {a:.4f}  {'OK' if a>=TARGET_ACC else 'FAIL'}")
 
     print("\n  Pérdida de precisión por resolución:")
     for res in df_c["resolution"].unique():
@@ -504,4 +504,4 @@ if __name__ == "__main__":
     df = run_all_experiments()
     if df is not None and not df.empty:
         analyze_viability(df)
-    print(f"\n  ✅ Listo. Resultados en: {OUTPUT_DIR}/")
+    print(f"\n  Listo. Resultados en: {OUTPUT_DIR}/")

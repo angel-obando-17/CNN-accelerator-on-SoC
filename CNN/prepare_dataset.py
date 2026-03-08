@@ -26,7 +26,7 @@ from tqdm import tqdm
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
-DATASET_ROOT    = "/mnt/c/Users/ANGEL OBANDO/Documents/Trabajo de grado/CNN/PlantVillage"   # <--- Ajusta esta ruta
+DATASET_ROOT    = "/mnt/c/Users/ANGEL OBANDO/Documents/Trabajo de grado/CNN/PlantVillage"
 TARGET_SAMPLES  = 1000
 CLASS_TO_DELETE = "Tomato__Tomato_mosaic_virus"
 CLASS_TO_AUG    = "Tomato_Leaf_Mold"
@@ -51,9 +51,9 @@ def delete_class(root, class_name):
     path = os.path.join(root, class_name)
     if os.path.isdir(path):
         shutil.rmtree(path)
-        print(f"  ✅ Clase eliminada: {class_name}")
+        print(f"    Clase eliminada: {class_name}")
     else:
-        print(f"  ⚠️  No se encontró la carpeta: {class_name} (puede que ya esté eliminada)")
+        print(f"    No se encontró la carpeta: {class_name} (puede que ya esté eliminada)")
 
 
 # =============================================================================
@@ -109,10 +109,10 @@ def augment_class(root, class_name, target):
     needed  = target - current
 
     if needed <= 0:
-        print(f"  ℹ️  {class_name} ya tiene {current} imágenes, no necesita augmentación.")
+        print(f"    {class_name} ya tiene {current} imágenes, no necesita augmentación.")
         return
 
-    print(f"  Augmentando {class_name}: {current} → {target} (+{needed} imágenes)")
+    print(f"    Augmentando {class_name}: {current} → {target} (+{needed} imágenes)")
 
     # Pool de imágenes fuente para augmentar (muestreo con reemplazo)
     source_files = random.choices(files, k=needed)
@@ -140,7 +140,7 @@ def augment_class(root, class_name, target):
         cv2.imwrite(dst_path, aug_img)
 
     final_count = len(get_image_files(folder))
-    print(f"  ✅ {class_name}: {final_count} imágenes finales")
+    print(f"    {class_name}: {final_count} imágenes finales")
 
 
 # =============================================================================
@@ -153,11 +153,11 @@ def balance_class(root, class_name, target):
     current = len(files)
 
     if current == target:
-        print(f"  ✅ {class_name}: ya tiene exactamente {target} imágenes")
+        print(f"    {class_name}: ya tiene exactamente {target} imágenes")
         return
 
     if current < target:
-        print(f"  ⚠️  {class_name}: tiene {current} < {target}. "
+        print(f"    {class_name}: tiene {current} < {target}. "
               f"Considera augmentarla también.")
         return
 
@@ -167,7 +167,7 @@ def balance_class(root, class_name, target):
         os.remove(os.path.join(folder, fname))
 
     final_count = len(get_image_files(folder))
-    print(f"  ✅ {class_name}: {current} → {final_count} imágenes")
+    print(f"    {class_name}: {current} → {final_count} imágenes")
 
 
 # =============================================================================
@@ -229,7 +229,7 @@ def main():
             continue
         n = len(get_image_files(path))
         total += n
-        status = "✅" if n == TARGET_SAMPLES else "⚠️ "
+        status = "OK" if n == TARGET_SAMPLES else "FAIL "
         print(f"  {status} {class_name}: {n} imágenes")
 
     final_classes = len([
@@ -238,7 +238,7 @@ def main():
     ])
     print(f"\n  Total clases: {final_classes}")
     print(f"  Total imágenes: {total}")
-    print(f"  Dataset listo para entrenar ✅")
+    print(f"  Dataset listo para entrenar.")
 
 
 if __name__ == "__main__":
