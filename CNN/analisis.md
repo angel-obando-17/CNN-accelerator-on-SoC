@@ -260,3 +260,104 @@ Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fuero
 | $96$ $\times$ $96$ | $534.568$ | INT8 | $0.768889$ | $6.8182$ | $120.656$ | $30.0562$ |
 | $96$ $\times$ $96$ | $534.568$ | INT16 | $0.766667$ | $16.0752$ | $141.765$ | $59.7883$ |
 
+## COMPARACIONES CON OTROS MODELOS
+
+Despues de realizar el segundo entrenamiento, se procedio a reliazar entrenamientos de tres modelos mas, Le-Net, Efficient-Net y MObileNetV2, los entrenamientos se realizaron con el mismo dataset de las imagenes ya segmentadas por U-Net, para este caso, unicamente se realizaron los entrenamientos en la resolucion original de las imagenes, la cual es de $256$ $\times$ $256$, despues se realizaron las respectivas cuantizaciones a INT8 e INT16 y se validaron las muestras de test, los resultados obtenidos de estos entrenamientos fueron los siguientes:
+
+### Le-Net
+
+* Total de $9000$ imagenes | $9$ clases.
+* [ Train $=$ $6300$,  Val $=$ $1350$,  Test $=$ $1350$ ].
+* Entrenamiento: $882.987$ s.
+![ Accuracy vs Loss in Training ]( resultados_comparativa/training_LeNet.png )
+* Accuracy: $0.8696$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (float32) ]( resultados_comparativa/cm_LeNet_float32.png)
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $12.140$ s.
+* Tamaño del modelo en INT8: $110.0$ KB.
+* Accuracy int8: $0.8681$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (int8) ]( resultados_comparativa/cm_LeNet_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $23.027$ s.
+* Tamaño del modelo en INT8: $114.2$ KB.
+* Accuracy int16: $0.8689$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (int16) ]( resultados_comparativa/cm_LeNet_int16.png )
+
+### MobileNetV2
+
+* Total de $9000$ imagenes | $9$ clases.
+* [ Train $=$ $6300$,  Val $=$ $1350$,  Test $=$ $1350$ ].
+* Entrenamiento: $770.597$ s.
+![ Accuracy vs Loss in Training ]( resultados_comparativa/training_MobileNetV2.png )
+* Accuracy: $0.9444$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (float32) ]( resultados_comparativa/cm_MobileNetV2_float32.png )
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $11.363$ s.
+* Tamaño del modelo en INT8: $143.5$ KB.
+* Accuracy int8: $0.9452$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (int8) ]( resultados_comparativa/cm_MobileNetV2_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $19.795$ s.
+* Tamaño del modelo en INT8: $166.5$ KB.
+* Accuracy int16: $0.9481$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (int16) ]( resultados_comparativa/cm_MobileNetV2_int16.png )
+
+### Efficient-Net
+
+* Total de $9000$ imagenes | $9$ clases.
+* [ Train $=$ $6300$,  Val $=$ $1350$,  Test $=$ $1350$ ].
+* Entrenamiento: $775.373$ s.
+![ Accuracy vs Loss in Training ]( resultados_comparativa/training_EfficientNet.png )
+* Accuracy: $0.9548$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (float32) ]( resultados_comparativa/cm_EfficientNet_float32.png )
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $26.483$ s.
+* Tamaño del modelo en INT8: $195.7$ KB.
+* Accuracy int8: $0.9163$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (int8) ]( resultados_comparativa/cm_EfficientNet_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $47.243$ s.
+* Tamaño del modelo en INT8: $225.7$ KB.
+* Accuracy int16: $0.9578$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (int16) ]( resultados_comparativa/cm_EfficientNet_int16.png )
+
+| Modelo | Cuantizacion | Accuracy | Inferencia ( ms / img ) | Tamaño del modelo ( kB ) | 
+|---|---|---|---|---|
+| MobileNetV1 | float32 | $0.885926$ | $8.6652$ | $1112.440$ |
+| MobileNetV1 | INT8 | $0.883704$ | $11.2185$ | $120.773$ |
+| MobileNetV1 | INT16 | $0.886667$ | $68.8505$ | $141.882$ |
+| Le-Net | float32 | $0.869630$ | $3.414$ | $1220.796$ |
+| Le-Net | INT8 | $0.868148$ | $16.962$ | $110.046$ |
+| Le-Net | INT16 | $0.868889$ | $373.245$ | $114.250$ |
+| MobileNetV2 | float32 | $0.944444$ | $4.078$ | $1333.752$ |
+| MobileNetV2 | INT8 | $0.945185$ | $7.424$ | $143.539$ |
+| MobileNetV2 | INT16 | $0.948148$ | $59.014$ | $166.476$ |
+| Efficient-Net | float32 | $0.954815$ | $5.475$ | $1597.346$ |
+| Efficient-Net | INT8 | $0.916296$ | $10.042$ | $195.664$ |
+| Efficient-Net | INT16 | $0.957778$ | $76.033$ | $225.656$ |
+
+
+
+
+
