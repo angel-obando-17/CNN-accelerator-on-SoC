@@ -357,6 +357,100 @@ Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fuero
 | Efficient-Net | INT8 | $0.916296$ | $10.042$ | $195.664$ |
 | Efficient-Net | INT16 | $0.957778$ | $76.033$ | $225.656$ |
 
+## Mobile-NetV2
+
+Despues de haber realizado el entrenamiento de disintos modelos para evaluar como se comportaban al ser entrenados con el mismo dataset, entonces se tomo la desicion de trabajar mas a fondo con MobileNetV2, esto porque fue el modelo que presento un accuracy mas alto y estable ante las cuantizaciones, donde el cambio entre float32, INT8 e INT16, es casi nulo, por este motivo, se entreno el modelo en las demas resoluciones antes evaluadas tambien en MobileNetV1, ya que los modelos de comparacion unicamente se entrenaron con las imagenes en su resolucion original, siendo $256$ $\times$ $256$, entonces se entreno este modelo en las demas resoluciones, donde se obtuvieron los siguiente resultados.
+
+### RESOLUCION 256
+
+* Indexado de archivos:  $0.085$ s.
+* Total de $9000$ imagenes | $9$ clases.
+* [ Train $=$ $6300$,  Val $=$ $1350$,  Test $=$ $1350$ ].
+![ Accuracy vs Loss in Training ]( resultados_mobilenetv2_experimento1/training_MobileNetV2_256x256.png )
+* Accuracy: $0.9319$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (float32) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_256x256_float32.png )
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $12.206$ s.
+* Tamaño del modelo en INT8: $143.9$ KB.
+* Accuracy int8: $0.9333$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (INT8) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_256x256_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $21.167$ s.
+* Tamaño del modelo en INT8: $166.8$ KB.
+* Accuracy int16: $0.9319$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (INT16) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_256x256_int16.png )
+
+#### RESOLUCION 128
+
+Para la segunda etapa de entrenamiento donde se uso las imagenes con un reescalado a $128$ $\times$ $128$, los resultados obtenidos fueron los siguientes:
+
+* Entrenamiento: $535.229$ s.
+![ Accuracy vs Loss in Training ]( resultados_mobilenetv2_experimento1/training_MobileNetV2_128x128.png )
+* Accuracy: $0.8919$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (float32) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_128x128_float32.png )
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $6.049$ s.
+* Tamaño del modelo en INT8: $143.9$ KB.
+* Accuracy int8: $0.8881$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (INT8) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_128x128_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $9.494$ s.
+* Tamaño del modelo en INT8: $166.8$ KB.
+* Accuracy int16: $0.8904$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (INT16) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_128x128_int16.png )
+
+#### RESOLUCION 96
+
+Para la tercer etapa y ultima etapa de entrenamiento donde se uso las imagenes con un reescalado a $96$ $\times$ $96$, los resultados obtenidos fueron los siguientes:
+
+* Entrenamiento: $537.572$ s.
+![ Accuracy vs Loss in Training ]( resultados_mobilenetv2_experimento1/training_MobileNetV2_96x96.png)
+* Accuracy: $0.8652$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (float32) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_96x96_float32.png )
+
+Despues de esto se cuantizo a INT8, donde se obtuvieron los siguientes resultados:
+
+* Conversion de parametros a INT8: $5.439$ s.
+* Tamaño del modelo en INT8: $143.8$ KB.
+* Accuracy int8: $0.8615$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (INT8) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_96x96_int8.png )
+
+Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fueron los siguientes:
+
+* Conversion de parametros a INT16: $7.604$ s.
+* Tamaño del modelo en INT8: $166.7$ KB.
+* Accuracy int16: $0.8615$.
+* Confussion Matrix:
+![ Confussion Matrix $256$ $\times$ $256$ (INT16) ]( resultados_mobilenetv2_experimento1/cm_MobileNetV2_96x96_int16.png )
+
+| Resolucion | Tiempo de Entrenamiento ( s ) | Cuantizacion | Accuracy | Inferencia ( ms / img ) | Tamaño del modelo ( kB ) | Tiempo de conversion ( s ) |
+|---|---|---|---|---|---|---|
+| $256$ $\times$ $256$ | $835.882$ | float32 | $0.931852$ | $89.0374$ | $1333.812$ | No aplica |
+| $256$ $\times$ $256$ | $835.882$ | INT8 | $0.933333$ | $7.8534$ | $143.851$ | $12.2063$ |
+| $256$ $\times$ $256$ | $835.882$ | INT16 | $0.931852$ | $60.9060$ | $166.804$ | $21.1668$ |
+| $128$ $\times$ $128$ | $535.229$ | float32 | $0.891852$ | $107.2005$ | $1333.645$ | No aplica |
+| $128$ $\times$ $128$ | $535.229$ | INT8 | $0.888148$ | $6.9041$ | $143.851$ | $6.0487$ |
+| $128$ $\times$ $128$ | $535.229$ | INT16 | $0.890370$ | $23.4037$ | $166.804$ | $9.4935$ |
+| $96$ $\times$ $96$ | $537.571$ | float32 | $0.865185$ | $85.5729$ | $1333.6386$ | No aplica |
+| $96$ $\times$ $96$ | $537.571$ | INT8 | $0.861481$ | $5.5657$ | $143.773$ | $35.4388$ |
+| $96$ $\times$ $96$ | $537.571$ | INT16 | $0.861481$ | $14.2891$ | $166.726$ | $7.6035$ |
+
 
 
 
