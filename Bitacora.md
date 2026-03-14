@@ -1,4 +1,4 @@
-# BITACORA [ TRABAJO DE GRADO ]
+# SEGUNDA BITACORA [ TRABAJO DE GRADO ]
 ---
 
 En este archivo se busca llevar un registro del proceso que se tendra para realizar el trabajo de grado de forma que todo quede evidenciado, todos los requerimientos y lo que se llevara a cabo sera anotado en esta bitacora.
@@ -36,7 +36,12 @@ La placa tiene un precio de \$432.010 mas \$102.344,36 de envio en AliExpress qu
 
 ### MODELOS DE CNN ESCOGIDA
 
-Como se menciono en las especificaciones de la board escogida, esta cuenta con recursos muy limitados dada las necesidades de los agricultores, teniendo en cuenta el hardware, entonces tambien se debe limitar los modelos CNN que se pueden montar en la board para que esta realice su tarea de inferencia de forma satisfactoria, por lo cual se opto por el modelo MobileNetV1.
+Como se menciono en las especificaciones de la board escogida, esta cuenta con recursos muy limitados dada las necesidades de los agricultores, teniendo en cuenta el hardware, entonces tambien se debe limitar los modelos CNN que se pueden montar en la board para que esta realice su tarea de inferencia de forma satisfactoria. Despues de un proceso de evaluacion y comparacion de multiples modelos de CNN (LeNet, MobileNetV1, MobileNetV2, EfficientNet) entrenados bajo las mismas condiciones con el dataset PlantVillage segmentado, se decidio trabajar con el modelo **MobileNetV2**, en la resolucion de **$256$ $\times$ $256$** y con cuantizacion **INT8**, esto por las siguientes razones:
+
+* MobileNetV2 obtuvo un accuracy de $94.14\%$ en INT8 con segmentacion HSV, superando a MobileNetV1 ($89.18\%$) en las mismas condiciones.
+* La perdida de accuracy al cuantizar de float32 a INT8 es minima ($0.07\%$), lo que valida que el modelo es robusto ante la cuantizacion.
+* Las operaciones adicionales que introduce MobileNetV2 respecto a V1 (residual connections y ReLU6) son implementables en hardware sin mayor complejidad.
+* La resolucion de $256$ $\times$ $256$ fue la que mayor accuracy produjo en todas las evaluaciones, y es la resolucion nativa del dataset PlantVillage.
 
 ### LIMITACIONES DEL ACELERADOR
 
@@ -46,13 +51,15 @@ Dado que la placa tiene recursos muy limitados se necesita que la CNNs que se mo
     + Conv $3$ $\times$ $3$.
     + Pointwise $1$ $\times$ $1$.
     + Depthwise $3$ $\times$ $3$.
-    + ReLU.
+    + ReLU6 ( ReLU con clamp en 6, reemplaza al ReLU simple para soportar MobileNetV2 ).
+    + Add elemento a elemento ( residual connections de MobileNetV2 ).
     + Pool Layer $2$ $\times$ $2$ ( opcional dependiendo de la capa ).
     + Global Average Pool ( opcional dependiendo de la capa ).
 * Numero maximo de canales:
     + $C_{in} \leq 64$.
     + $C_{out} \leq 64$.
-* Resolucion maxima de entrada de $96$ $\times$ $96$ con 3 canales RGB.
+    + Los canales de expansion interna de los bloques invertidos de MobileNetV2 pueden superar 64 de forma transitoria, sin embargo los canales de entrada y salida de cada bloque siempre respetan el limite impuesto.
+* Resolucion de entrada: $256$ $\times$ $256$ con 3 canales RGB. El procesamiento se realiza mediante tiling espacial para acomodar los feature maps en BRAM.
 * Precision numerica de INT8, para los acumuladores INT32 y pesos cuantizados offline.
 * Limitaciones a nivel de PL:
     + Un solo motor de convolucion, que sera reutilizado en el tiempo, dicho motor sera configurable por registros, y tendra modos Conv $3$ $\times$ $3$, Conv $1$ $\times$ $1$ y Depthwise $3$ $\times$ $3$.
@@ -61,12 +68,13 @@ Dado que la placa tiene recursos muy limitados se necesita que la CNNs que se mo
     + DDR como almacenamiento principal usandose para activaciones grandes y pesos por capa.
     + Usar una camara MIPI para la captura de imagenes.
 * Pre-procesamiento:
-    + Re-size a $96$ $\times$ $96$.
+    + Re-size a $256$ $\times$ $256$.
+    + Segmentacion HSV threshold ( ejecutada en Core 1 del PS, antes de pasar la imagen al acelerador ).
     + RGB.
     + Normalizacion simple.
     + Todo en INT8.
 * Dataflow:
-    Cuando se habla del datafow en una CNN, estamos hablando sobre como es el flujo de datos ( input data, weights y partial sums ) atravez del hardware sobre el cual esta corriendo, buscando que haya la mayor optimizacion posible entre la memoria y los elementos de procesamiento, normalmente se tienen los tipos weight stationary, output stationary, input stationary, and row stationary.
+    Cuando se habla del datafow en una CNN, estamos hablando sobre como es el flujo de datos ( input data, weights y partial sums ) atravez del hardware sobre el cual esta corriendo, buscando que haya la mayor optimizacion posible entre la memoria y los elementos de procesamiento, normalmente se tienen los tipos weight stationary, output stationary, input stationary y row stationary.
     + Weight Stationary: 
     Carga los pesos en los elementos de procesamiento (PEs por sus siglas en ingles), guardandolos ahi, esto minimizando el costo de energia de leer pesos desde la memoria.
     + Output Stationary:
@@ -103,9 +111,15 @@ No todas las capas de una CNN están completamente conectadas. Debido a que las 
 
 ![Structure of a CNN](images/structure_of_a_cnn.png)
 
-Despues de entender un poco como esta compuesta una CNN tradicional, las cuales pueden incluir otras capas ademas de las mencionadas dependiendo del modelo, la idea es explicar entonces porque se decidio trabajar con el modelo MObileNetV1, esto se debe a que una CNN tradicional debe procesar todos canales o mapas de caracteristicas que se hayan obtenido en la capa anterior, entonces si nuestros mapas de caracteristicas son al momento de entrar en una nueva capa por ejemplo 16, entonces estos 16 mapas se procesan al tiempo por cada uno de los filtros de la capa a la cual estan entrando, esto quiere decir que si tenemos en esta capa 16 filtros/kernels, entonces los 16 mapas son convolucionados con cada uno de los 16 filtros, dado que cada filtro se aplica a cada uno de los mapas o tambien llamados canales cuando ya son entradas de una capa, esto produce que por cada canal se obtendran 16 nuevos canales, como son 16 canales, pues en total obtendriamos $16$ $\times$ $16$ mapas de caracteristicas en la salida de esta capa, lo cual incrementa demasiado los canales de entrada que tendra la siguiente capa, de ahi viene una de las limitaciones impuestas y es que los canales de entrada y salida deberan estar limitados a menos o igual a 64.
+Despues de entender un poco como esta compuesta una CNN tradicional, las cuales pueden incluir otras capas ademas de las mencionadas dependiendo del modelo, la idea es explicar entonces porque se decidio trabajar con el modelo MobileNetV2. 
 
-Entonces una vez entendido este panorama, se puede proceder a explicar lo que significa que el acelerador soportar Depthwise Separable Convolutions, esta es una estrategia que consiste en dos pasos, primero la operacion DespthWise y consecuente a esta la operacion PointWise, donde en lugar de aplicar todos los filtros de una capa a cada canal de entrada de forma simultanea, lo que se hace es convolucionar cada canal con un solo filtro de la capa, esto reduce las operaciones que se deben hacer por cada kernel, y ademas como se aplica un filtro por canal de entrada, entonces solo se produce un mapa de caracteristicas por cada canal de entrada, esto significa que a la salida de la capa tendremos que $C_{in} = C_{out}$. Despues de realizar la operacion DepthWise se procede a realizar la operacion PintWise $1$ $\times$ $1$, esta se encarga de combinar las salidas de la capa, de esta forma obteniendo los mapas de caracteristicas que se debian haber obtenido si hubieramos hecho una convolucion normal.
+Al igual que MobileNetV1, MobileNetV2 se basa en Depthwise Separable Convolutions, lo que reduce significativamente la cantidad de operaciones respecto a una convolucion tradicional. Sin embargo, MobileNetV2 introduce dos mejoras clave sobre V1:
+
+La primera mejora es el **bloque invertido** (Inverted Residual Block), que expande los canales de entrada antes de aplicar la Depthwise Convolution y luego los proyecta de vuelta a un numero menor de canales con una Pointwise Convolution. Esta expansion transitoria de canales permite que la Depthwise Convolution opere en un espacio de mayor dimension, capturando mas caracteristicas, sin que los canales de entrada y salida del bloque superen el limite de 64 impuesto por el acelerador.
+
+La segunda mejora es la **residual connection**, que suma la entrada del bloque directamente a su salida cuando las dimensiones coinciden. Esta conexion ayuda al gradiente a fluir mejor durante el entrenamiento y permite que el modelo aprenda correcciones sobre la identidad en lugar de transformaciones completas, lo que generalmente mejora el accuracy especialmente cuando se trabaja con resoluciones o datasets limitados.
+
+Estas dos mejoras explican por que MobileNetV2 logro un accuracy de $94.14\%$ en INT8 frente a $89.18\%$ de MobileNetV1 bajo exactamente las mismas condiciones de entrenamiento y evaluacion.
 
 ### Processing System
 
@@ -115,27 +129,35 @@ Entonces una vez entendido este panorama, se puede proceder a explicar lo que si
     + Maneja la logica de alto nivel.
     + Toma desiciones ( inferencia, clasificacion, estados ).
 
-    Nos interesa aprovechar los dos nucleos del chip, ya que de esta forma podemos asignar dichas tareas de forma equivalente para que la carga no sea de una sola unidad, de esta forma:
+    Nos interesa aprovechar los dos nucleos del chip, ya que de esta forma podemos asignar dichas tareas de forma equivalente para que la carga no sea de una sola unidad. En el SoC Zynq-7020, el Core 0 arranca primero por hardware y actua como maestro del sistema, mientras que el Core 1 permanece dormido hasta que el Core 0 lo despierta mediante un mecanismo de señalizacion usando la OCM (On-Chip Memory de 256KB). De esta forma:
 
-    + Core 0: control del sistema.
-    + Core 1: gestion de inferencia / comunicacion.
+    + Core 0: maestro del sistema ( arranca primero, orquesta todo el flujo ).
+    + Core 1: esclavo ( duerme en spinlock, despierta cuando Core 0 lo señala ).
 
 * Runtime Bare-Metal (Control & Concurrency)
 
-    + Coordina tareas entre nucleos.
+    + Coordina tareas entre nucleos via OCM.
     + Ligero para no depender de un OS completo.
     + Control determinista del hardware.
+    + Comunicacion inter-core: Core 0 escribe flag en OCM, Core 1 lee flag en spinlock.
+    + La imagen segmentada se pasa de Core 1 a Core 0 a traves de OCM ( $256 \times 256 \times 3 = 192$ KB, cabe en los 256 KB disponibles ).
 
     De esta forma las tareas se podrian repartir de la siguiente manera:
     
     + Core 0:
-        - Configurar camara.
-        - Manejar interrupciones.
-        - Coordinar DMA.
+        - Arranca el sistema.
+        - Configura la camara MIPI.
+        - Despierta a Core 1 cuando hay un frame disponible en DDR.
+        - Espera señal de Core 1 indicando segmentacion lista.
+        - Scheduler de la CNN: configura parametros por capa, lanza DMA, lanza acelerador.
+        - Maneja interrupciones del acelerador.
+        - Lee resultado final y toma decision de clasificacion.
     + Core 1:
-        - Scheduler de la CNN.
-        - Lanzar capas al acelerador.
-        - Leer resultados.
+        - Duerme en spinlock esperando señal de Core 0.
+        - Al despertar: lee frame de DDR, aplica segmentacion HSV threshold.
+        - Escribe imagen segmentada en OCM.
+        - Señala a Core 0 que la segmentacion esta lista.
+        - Vuelve a dormir.
 
 * Drivers AXI / DMA
 
@@ -173,17 +195,20 @@ Entonces una vez entendido este panorama, se puede proceder a explicar lo que si
 
 * Pre-processsing
 
-    + Resize.
-    + Normalizacion simple.
-    + Conversion a INT8.
-    + Reordenamiento de datos.
+    + Resize de la imagen capturada a $256$ $\times$ $256$.
+    + Normalizacion simple ( division por 255, conversion a INT8 ).
+    + Reordenamiento de datos al formato esperado por el acelerador.
+    + Nota: la segmentacion HSV se realiza en el Core 1 del PS antes de que la imagen llegue a este bloque, por lo que el Pre-processing en PL recibe una imagen ya segmentada.
 
 * CNN Accelerator
 
-    + Convoluciones.
-    + Depthwise.
-    + Pooling.
-    + Activacion.
+    + Conv $3$ $\times$ $3$ normal.
+    + Depthwise $3$ $\times$ $3$.
+    + Pointwise $1$ $\times$ $1$.
+    + ReLU6 ( activacion con clamp ).
+    + Add elemento a elemento ( residual connections ).
+    + Pooling / GAP.
+    + Motor unico reutilizado por capa, configurable por registros AXI-Lite.
 
 * DMA Engine
 
@@ -324,7 +349,7 @@ En la macro-arquitectura podemos apreciar como se van a distribuir las tareas en
 flowchart TB
     subgraph CNN["CNN Accelerator (PL)"]
 
-        CTRL["Control FSM<br/>(Mode Select:<br/>Conv3x3 / DW3x3 / PW1x1)"]
+        CTRL["Control FSM<br/>(Mode Select:<br/>Conv3x3 / DW3x3 / PW1x1 / ADD)"]
         ADDR["Address Generator"]
 
         IN_BUF["Input Feature Buffer (BRAM)"]
@@ -338,8 +363,10 @@ flowchart TB
         MAC["MAC Array (16 PEs)"]
         ACC["Accumulator Bank (16 x INT32)"]
 
-        RELU["ReLU"]
+        RELU6["ReLU6 (clamp 0..6)"]
         QUANT["Quantizer (Shift + Clamp INT8)"]
+
+        ADD["ADD Unit (Residual)<br/>16 sumadores INT8 en paralelo"]
 
         POOL["Pooling / GAP (Optional)"]
 
@@ -357,16 +384,22 @@ flowchart TB
         MUX_IN --> MAC
         W_BUF --> MAC
         MAC --> ACC
-        ACC --> RELU
-        RELU --> QUANT
-        QUANT --> POOL
+        ACC --> RELU6
+        RELU6 --> QUANT
+        QUANT --> ADD
+        ADD --> POOL
         POOL --> OUT_BUF
+
+        %% Residual path: IN_BUF -> ADD (cuando aplica)
+        IN_BUF -->|"residual (stride=1, Cin=Cout)"| ADD
 
         %% Control path
         CTRL --> ADDR
         CTRL --> MAC
         CTRL --> ACC
+        CTRL --> RELU6
         CTRL --> QUANT
+        CTRL --> ADD
         CTRL --> POOL
         CTRL --> MUX_IN
         ADDR --> IN_BUF
@@ -376,7 +409,7 @@ flowchart TB
     end
 ```
 
-Como se explico anteriormente, el acelerador soportara 3 modos de convolucion, conv normal $3$ $\times$ $3$, DepthWise $3$ $\times$ $3$ y PointWise $1$ $\times$ $1$, por eso es necesario que la FSM del acelerador sepa que señales enviar dependiendo del modo en el cual se encuentre de la capa, para todos los modos primero se debe pasar por el [Address Generator], este se encargar de calcular direcciones de memoria, de esta forma se controla:
+Como se explico anteriormente, el acelerador soportara 4 modos de operacion: Conv normal $3$ $\times$ $3$, DepthWise $3$ $\times$ $3$, PointWise $1$ $\times$ $1$, y ADD (suma elemento a elemento para las residual connections de MobileNetV2). La FSM del acelerador genera las señales de control correspondientes segun el modo activo en cada momento.
 
 * Que posicion $(x, y)$ de los feature maps estoy procesando.
 * Que canal es el que estoy leyendo.
@@ -459,7 +492,7 @@ Siguiendo tenemos el [Weight Buffer] que es simplemente parte de la BRAM donde s
 * De que filtro es ese peso.
 * A que canal corresponde hacer convolucion ese peso del filtro.
 
-Tenemos el [MAC Array] el cual es un arreglo de 16 MACS que trabajaran en paralelo dependiendo del modo en el cual este el acelerador en ese momento, cada MAC realiza la operacion de convolucion de un kernel con su respectivo canal en caso de DepthWise $3$ $\times$ $3$, de esta forma estamos usando un MAC por canal, o haciendo paralelismo sobre canales, para este caso cada MAC debera realizar $3$ $\times$ $3$ $\times$ $1$ multiplicaciones, sumar el resultado de esas multiplicaciones y guardarlas en su respectivo acumulador que esta en el bloque de [Accumulator Bank]. En caso de conv $3$ $\times$ $3$ normal, entonces los MACs se usan de forma que hacemos paralelismo sobre $C_{out}$, es decir como en convoluciones normales, los filtros se aplican sobre todos los canales de entrada entonces podemos hacer que cada MAC haga las operaciones correspondientes para cada filtro, en este caso los filtros/kernels no son realmente $3$ $\times$ $3$, sino mas bien $3$ $\times$ $3$ $\times$ $C_{in}$, ya que el kernel debe tener progundidad igual al numero de canales de entrada, por lo tanto no tiene solo $9$ pesos sino $3$ $\times$ $3$ $\times$ $C_{in}$, por lo que para este modo, cada MAC tambien debe realizar $3$ $\times$ $3$ $\times$ $C_{in}$ multiplicaciones, luego como ya se explico, sumar el resultado de estas multiplicaciones y guardarlas en sus respectivo acumulador del [Accumulator Bank], escencialmente se propone tener tantos acumuladores como MACs en el array, ya que asi cada MAC tiene un acumulador siempre disponible para su uso.
+Tenemos el [MAC Array] el cual es un arreglo de 16 MACS que trabajaran en paralelo dependiendo del modo en el cual este el acelerador en ese momento, cada MAC realiza la operacion de convolucion de un kernel con su respectivo canal en caso de DepthWise $3$ $\times$ $3$, de esta forma estamos usando un MAC por canal, o haciendo paralelismo sobre canales, para este caso cada MAC debera realizar $3$ $\times$ $3$ $\times$ $1$ multiplicaciones, sumar el resultado de esas multiplicaciones y guardarlas en su respectivo acumulador que esta en el bloque de [Accumulator Bank]. En caso de conv $3$ $\times$ $3$ normal, entonces los MACs se usan de forma que hacemos paralelismo sobre $C_{out}$, es decir como en convoluciones normales, los filtros se aplican sobre todos los canales de entrada entonces podemos hacer que cada MAC haga las operaciones correspondientes para cada filtro, en este caso los filtros/kernels no son realmente $3$ $\times$ $3$, sino mas bien $3$ $\times$ $3$ $\times$ $C_{in}$, ya que el kernel debe tener profundidad igual al numero de canales de entrada, por lo tanto no tiene solo $9$ pesos sino $3$ $\times$ $3$ $\times$ $C_{in}$, por lo que para este modo, cada MAC tambien debe realizar $3$ $\times$ $3$ $\times$ $C_{in}$ multiplicaciones, luego como ya se explico, sumar el resultado de estas multiplicaciones y guardarlas en sus respectivo acumulador del [Accumulator Bank], escencialmente se propone tener tantos acumuladores como MACs en el array, ya que asi cada MAC tiene un acumulador siempre disponible para su uso.
 
 En el [Accumulator Bank] como ya se explico, simplemente se guarda el resultado de cada una de las convoluciones hechas previamente por cada uno de los MACs.
 
@@ -586,8 +619,6 @@ flowchart TB
 
 ## ESTRATEGIA DE MEMORIA
 
-Para ver un mayor enfoque de que funcion cumplira cada bloque de la macro-arquitectura, necesitamos entonces ver mas a profundidad que realizara cada uno de estos:
-
 ```mermaid
 
 flowchart TB
@@ -609,7 +640,7 @@ flowchart TB
     end
 ```
 
-Una vez comprendido que realizara cada bloque en esta seccion entonces se debe explicar la estrategia de carga y gestion de pesos, como se mostro inicialmente, los pesos de cada capa estaran originalmente almacenados en la DDR por lo que debemos traerlos a BRAM para poder trabajar con ellos sin leer de forma recurrente en memoria, para esto, antes de iniciar el procesamiento de una capa:
+Una vez comprendido que realizara cada bloque en la seccion anterior entonces se debe explicar la estrategia de carga y gestion de pesos, como se mostro inicialmente, los pesos de cada capa estaran originalmente almacenados en la DDR por lo que debemos traerlos a BRAM para poder trabajar con ellos sin leer de forma recurrente en memoria, para esto, antes de iniciar el procesamiento de una capa:
 
 * El procesador configura la transferencia de los pesos mediante el DMA.
 * Los pesos correspondientes a la capa se cargan al [Weight Buffer].
@@ -634,7 +665,7 @@ Para esto el [Address Generator] es responsable de:
     + Indice del tile.
 
 El procesamiento por tiles permite:
-* Reducir la cantidad de datos simultaneamente alamcenados en BRAM.
+* Reducir la cantidad de datos simultaneamente almacenados en BRAM.
 * Mantener alta reutilización local.
 * Disminuir transferencias frecuentes a DDR.
 
@@ -672,21 +703,24 @@ flowchart LR
     end
 ```
 
-Dado que la BRAM es el recurso más crítico del diseño, es necesario verificar que la suma de todos los buffers internos del acelerador no exceda la capacidad disponible del SoC. A continuacion se presenta el consumo estimado de BRAM para el peor caso, es decir, con $C_{in}$ $=$ $C_{out}$ $=$ $64$ y tiles de $96$ $\times$ $16$.
+Dado que la BRAM es el recurso más crítico del diseño, es necesario verificar que la suma de todos los buffers internos del acelerador no exceda la capacidad disponible del SoC. Con la resolucion de entrada de $256$ $\times$ $256$ y MobileNetV2, el feature map mas grande que debe procesarse es el de la primera capa Conv $3$ $\times$ $3$ con stride $2$, que produce una salida de $128$ $\times$ $128$ $\times$ $32$. El procesamiento por tiles se ajusta a este feature map, usando tiles de $128$ $\times$ $8$ para la primera capa y ajustando segun la capa. A continuacion se presenta el consumo estimado de BRAM para el peor caso, es decir, con $C_{in}$ $=$ $C_{out}$ $=$ $64$ y tiles de $128$ $\times$ $8$:
 
 | Buffer | Cálculo | Tamaño estimado |
 |---|---|---|
-| LineBuffers (3 líneas × 96 píxeles × 64 canales × 1B) | $3 \times 96 \times 64$ | ~18 KB |
-| Input Feature Buffer (tile 96×16×64) | $96 \times 16 \times 64$ | ~96 KB |
+| LineBuffers (3 líneas × 128 píxeles × 64 canales × 1B) | $3 \times 128 \times 64$ | ~24 KB |
+| Input Feature Buffer (tile 128×8×64) | $128 \times 8 \times 64$ | ~64 KB |
 | Weight Buffer (peor caso Pointwise 64×64) | $64 \times 64$ | ~4 KB |
-| Output Buffer (tile 96×16×64, reutilizado DW→PW) | $96 \times 16 \times 64$ | ~96 KB |
+| Output Buffer (tile 128×8×64, reutilizado DW→PW) | $128 \times 8 \times 64$ | ~64 KB |
+| Residual Buffer (tile 128×8×64, para ADD de MobileNetV2) | $128 \times 8 \times 64$ | ~64 KB |
 | Window Buffer (ventana 3×3 × 64 canales) | $9 \times 64$ | < 1 KB |
-| **Total** | | **~214 KB** |
+| **Total** | | **~220 KB** |
 
-La Zynq-7020 dispone de 4.9 Mb de BRAM eso es aproximadamente $612.5 KB$, por lo que el consumo estimado representa aproximadamente el $34.9 \%$ del total disponible. Este margen amplio valida las decisiones de diseño tomadas y además deja espacio suficiente para los buffers internos del DMA Engine y el bloque de Pre-processing, sin comprometer la disponibilidad de BRAM para otros bloques de la PL.
+La Zynq-7020 dispone de 4.9 Mb de BRAM eso es aproximadamente $612.5 KB$, por lo que el consumo estimado representa aproximadamente el $35.9 \%$ del total disponible. Este margen amplio valida las decisiones de diseño tomadas y deja espacio suficiente para los buffers internos del DMA Engine y el bloque de Pre-processing.
 
-Vale la pena resaltar que el [Output Buffer] cumple una doble función: 
-* Almacena el resultado del Depthwise y actúa como [Input Buffer] del Pointwise en el flujo fusionado DW→PW. Esto elimina la necesidad de un buffer intermedio dedicado, ahorrando aproximadamente 96 KB adicionales de BRAM respecto a una implementación naive con buffers separados.
+Vale la pena resaltar dos optimizaciones importantes:
+
+* El [Output Buffer] cumple una doble funcion: almacena el resultado del Depthwise y actua como [Input Buffer] del Pointwise en el flujo fusionado DW→PW. Esto elimina la necesidad de un buffer intermedio dedicado.
+* El [Residual Buffer] solo se activa cuando la FSM esta en modo ADD, es decir unicamente en los bloques de MobileNetV2 donde stride=1 y $C_{in} = C_{out}$. En los demas modos este buffer no se usa, por lo que su espacio puede ser compartido con otros propositos segun convenga.
 
 ## PIPELINE DE FRAMES
 
@@ -698,17 +732,21 @@ flowchart LR
 
     CAP["1. Captura MIPI"]
     DDRF["2. Frame en DDR"]
-    PRE["3. Pre-processing (PL)"]
-    FM0["4. Feature Map Inicial"]
-    SCH["5. Scheduler (PS)"]
-    DMA_IN["6. DMA: DDR -> PL"]
-    CNN["7. CNN Accelerator (PL)"]
-    DMA_OUT["8. DMA: PL -> DDR"]
-    NEXT["9. Siguiente Capa"]
-    RES["10. Resultado Final"]
+    SEG["3. Segmentacion HSV<br/>(Core 1 - PS)"]
+    OCM["4. Imagen segmentada<br/>en OCM"]
+    PRE["5. Pre-processing (PL)<br/>Resize + Norm + INT8"]
+    FM0["6. Feature Map Inicial"]
+    SCH["7. Scheduler (Core 0 - PS)"]
+    DMA_IN["8. DMA: DDR -> PL"]
+    CNN["9. CNN Accelerator (PL)"]
+    DMA_OUT["10. DMA: PL -> DDR"]
+    NEXT["11. Siguiente Capa"]
+    RES["12. Resultado Final"]
 
     CAP --> DDRF
-    DDRF --> PRE
+    DDRF --> SEG
+    SEG --> OCM
+    OCM --> PRE
     PRE --> FM0
     FM0 --> SCH
     SCH --> DMA_IN
@@ -718,24 +756,35 @@ flowchart LR
     NEXT --> SCH
     SCH --> RES
 ```
-En este primer diagrama podemos observar:
+En este diagrama podemos observar:
 
-* Frame adquirido por la camara MIPI que se escribe en memoria.
-* Ese frame se lee de la memoria, se preprocesa, una vez sale de memoria se borra de memoria para poder liberar espacio.
-* Se reutiliza el mismo motor por capa.
-* Los resultados intermedios se van guardando en la memoria.
-* El PS actua como un scheduler, decidiendo que operacion se ejecuta en cada momento en ell acelerador, y como se usan los recursos, esto se puede ejemplificar con algo muy sencillo como lo siguiente:
+* Frame adquirido por la camara MIPI que se escribe en DDR.
+* Core 1 lee el frame de DDR, aplica la segmentacion HSV threshold, y escribe la imagen segmentada en OCM.
+* Core 0 recibe la señal de Core 1 y toma la imagen segmentada de OCM para pasarla al bloque de Pre-processing en PL.
+* El bloque de Pre-processing en PL aplica resize, normalizacion y conversion a INT8.
+* Se reutiliza el mismo motor de convolución por cada capa.
+* Los resultados intermedios se van guardando en DDR.
+* Core 0 actua como scheduler, decidiendo que operacion ejecutar en cada momento.
 
 ```C
 for( layer = 0; layer < num_layers; layer++ ) {
-    configure_parameters( layer );
-    launch_DMA_input( );
-    launch_accelerator( );
+    configure_parameters( layer );   /** modo, dimensiones, direcciones DDR. **/
+    load_weights_DMA( layer );       /** DDR -> Weight Buffer BRAM. **/
+    launch_DMA_input( layer );       /** DDR -> Input Feature Buffer BRAM. **/
+    launch_accelerator( );           /** Inicia computo. **7
+    wait_interruption( );            /** Espera IRQ del acelerador **/
+    if( layer_has_residual( layer ) ) {
+        launch_add_unit( layer );    /** Suma residual IN_BUF + OUT_BUF. **/
+        wait_interruption( );
+    }
+    launch_DMA_output( layer );      /** Output Buffer BRAM -> DDR. **/
     wait_interruption( );
 }
 ```
 
-* Se define el resultado final.
+* Core 0 no procesa datos, solo orquesta.
+* DDR actua como almacenamiento intermedio entre capas.
+* Hay separacion clara entre control, transferencia y computo.
 
 ```mermaid
 
@@ -807,3 +856,71 @@ $H \times W \times C_{in} \times C_{out}$
 Con 16 PEs operando en paralelo entonces tenemos un estimado de ciclos igual a $(H \times W \times C_{in} \times C_{out}) / 16$
 
 Estas estimaciones no consideran latencias de memoria ni sobrecarga de control, pero permiten obtener una cota inferior del tiempo de ejecución.
+
+Para una capa DepthWise $3$ $\times$ $3$:
+
+Las multiplicaciones totales que se deben hacer son:
+
+$H \times W \times C_{in} \times 9$
+
+Con 16 PEs operando en paralelo entonces tenemos un estimado de ciclos igual a $(H \times W \times C_{in} \times 9) / 16$
+
+Para la operacion ADD (residual connection):
+
+La operacion ADD simplemente suma elemento a elemento el tensor de entrada con el tensor de salida del bloque. No hay multiplicaciones, solo sumas:
+
+$H \times W \times C$
+
+Con 16 sumadores en paralelo: $(H \times W \times C) / 16$ ciclos. Es la operacion mas rapida del pipeline.
+
+## SEGMENTACIÓN HSV — IMPLEMENTACIÓN EN BARE-METAL
+
+La segmentacion HSV threshold es el metodo escogido para separar la hoja del fondo antes de que la imagen entre al acelerador CNN. Este metodo fue seleccionado porque:
+
+* Es implementable directamente en C bare-metal sin librerias externas.
+* Solo usa comparaciones de rangos enteros, sin estructuras de grafos ni redes neuronales.
+* Produce resultados consistentes con lo que el modelo aprendio durante el entrenamiento.
+* Es ejecutable en el Core 1 del PS mientras Core 0 se prepara para lanzar el acelerador.
+
+### Algoritmo HSV Threshold
+
+```C
+/** Pseudocodigo del algoritmo de segmentacion HSV en C bare-metal. **/
+/** Entrada: Imagen BGR 256x256 en DDR. **/
+/** Salida:  Imagen segmentada en OCM. **/
+
+void segment_hsv( uint8_t* img_bgr, uint8_t* img_out, int width, int height ) {
+    for( int i = 0; i < width * height; i++ ) {
+        uint8_t b = img_bgr[ 3 * i ];
+        uint8_t g = img_bgr[ 3 * i + 1 ];
+        uint8_t r = img_bgr[ 3 * i + 2 ];
+
+        /** Conversion RGB -> HSV ( aritmetica entera ). **/
+        uint8_t h, s, v;
+        rgb_to_hsv_int( r, g, b, &h, &s, &v );
+
+        /** Threshold: verde/verde-amarillo O marron/naranja ( lesiones ). **/
+        int mask_green = ( h >= 15 && h <= 95 && s >= 30 && v >= 20 );
+        int mask_brown = ( h >=  5 && h <= 20 && s >= 50 && v >= 20 && v <= 220 );
+        int fg = mask_green || mask_brown;
+
+        /** Aplicar mascara: fondo = negro. **/
+        img_out[ 3 * i ]     = fg ? b : 0;
+        img_out[ 3 * i + 1 ] = fg ? g : 0;
+        img_out[ 3 * i + 2 ] = fg ? r : 0;
+    }
+    /** Post-procesamiento morfologico: CLOSE + OPEN ( kernel 7x7 ). **/ 
+    morphology_close_open(img_out, width, height);
+}
+```
+
+### Parametros de los rangos HSV
+
+Los rangos utilizados en el threshold fueron validados empiricamente durante los experimentos de entrenamiento:
+
+| Region | H min | H max | S min | S max | V min | V max |
+|---|---|---|---|---|---|---|
+| Verde / hoja sana | 15 | 95 | 30 | 255 | 20 | 255 |
+| Marron / lesiones | 5 | 20 | 50 | 255 | 20 | 220 |
+
+Nota: los rangos HSV en OpenCV usan H=[0,179], S=[0,255], V=[0,255]. La implementacion en bare-metal usara la misma escala para mantener consistencia con el entrenamiento.

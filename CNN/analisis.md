@@ -451,7 +451,35 @@ Para finalizar tenemos el modelo cuantizado en INT16, donde los resultados fuero
 | $96$ $\times$ $96$ | $537.571$ | INT8 | $0.861481$ | $5.5657$ | $143.773$ | $35.4388$ |
 | $96$ $\times$ $96$ | $537.571$ | INT16 | $0.861481$ | $14.2891$ | $166.726$ | $7.6035$ |
 
+## Segmentacion HSV.
 
+Despuees de haber validado dos modelos de segmentacion distintos, se tomo en cuenta el hecho de que dichos metodos debian tambian estar implementados en el harware final sobre el que correria el modelo, esto implicaba varias cosas:
 
+* Para el caso de grabCut de openCV, el codigo fuente esta realizado en C++, e implementar dicho codigo teniendo en ceunta que no se tendra un Sistema Operativo orquestador para poder usar herramientas de mas alto nivel, entonces implicaria que todo el algoritmo debia ser implementado a C, esto conllevaria mucho tiempo de trabajo, unicamente para poder realizar la etapa de segmentacion, por lo cual esta idea se termino descartando debido a estas dificultades.
 
+* Para el caso de la CNN U-Net, se tiene una situacion similar que con el algoritmo de grabCut, al ser esta un red neuronal convolucional, y el proposito del proyecto es acelerar redes neuronales convolucionales basadas en el modelo de MobileNetV1-V2, pues entonces, esto implicaria que dicha CNN U-Net, tambien deberia tener su mini espacio en los recursos hardware para ser acelerada y realizar la segmentacion de las imagenes, esto a grandes rasgos es implementar dos aceleradores en uno, el primero para U-Net que se encargaria de segmentar, y el acelerador para MobileNetV1-V2 para clasificar, esto complica la meta del trabajo en gran cantidad, dado que se deberia diseñar una arquitectura que sea capaz de manejar la arquitectura interna del modelo U-Net, tambien, otra opcion es delegar esta tarea a algun core del PS, pero esto seria lento, dado que los cores no son muy eficazes realizando inferencia, por lo que se generaria latencia adicional y eso es lo que se busca reducir, de esta forma entonces este metodo tambien queda descartado.
 
+Finalmente entonces, se evaluaron posibles metodos de segmentacion que sean muy buenos a la hora de realizar su tarea principal, la cual es la de segmentar y que ademas sea facil de implementar ya esa en hardware o en software, de esta forma entonces se llego al metodo HSV, para validar que tan buen resultado podia dar dicho metodo de segmentacion, entonces se procedio a realizar un entrenamiento para los modelos de MoibleNetV1 y MobileNetV2, cada uno en las resoluciones ya vistas anteriormente y en las cuantizaciones respectivas, donde se llego al siguiente resultado:
+
+| Modelo | Resolucion | Tiempo de Entrenamiento ( s ) | Cuantizacion | Accuracy | Inferencia ( ms / img ) | Tamaño del modelo ( kB ) | Tiempo de conversion ( s ) |
+|---|---|---|---|---|---|---|
+| MobileNetV1 | $256$ $\times$ $256$ | $1018.646$ | float32 | $00.894815$ | $75.6133$ | $1112.443$ | No aplica |
+| MobileNetV1 | $256$ $\times$ $256$ | $1018.646$ | INT8 | $0.891852$ | $10.8527$ | $121.171$ | $11.5081$ |
+| MobileNetV1 | $256$ $\times$ $256$ | $1018.646$ | INT16 | $0.893333$ | $69.1207$ | $142.296$ | $21.0533$ |
+| MobileNetV1 | $128$ $\times$ $128$ | $776.667$ | float32 | $0.834815$ | $70.5669$ | $1112.297$ | No aplica |
+| MobileNetV1 | $128$ $\times$ $128$ | $776.667$ | INT8 | $0.829630$ | $10.0106$ | $121.171$ | $7.7092$ |
+| MobileNetV1 | $128$ $\times$ $128$ | $776.667$ | INT16 | $0.830370$ | $27.6465$ | $142.296$ | $10.6148$ |
+| MobileNetV1 | $96$ $\times$ $96$ | $752.522$ | float32 | $0.688148$ | $82.5353$ | $1112.291$ | No aplica |
+| MobileNetV1 | $96$ $\times$ $96$ | $752.522$ | INT8 | $0.687407$ | $10.3658$ | $121.015$ | $6.2473$ |
+| MobileNetV1 | $96$ $\times$ $96$ | $752.522$ | INT16 | $0.691852$ | $19.5669$ | $142.140$ | $9.2255$ |
+| MobileNetV2 | $256$ $\times$ $256$ | $964.043$ | float32 | $0.942222$ | $81.1592$ | $1333.805$ | No aplica |
+| MobileNetV2 | $256$ $\times$ $256$ | $964.043$ | INT8 | $0.941481$ | $11.1495$ | $143.320$ | $11.9327$ |
+| MobileNetV2 | $256$ $\times$ $256$ | $964.043$ | INT16 | $0.941481$ | $60.0587$ | $166.242$ | $20.491$ |
+| MobileNetV2 | $128$ $\times$ $128$ | $744.527$ | float32 | $0.900000$ | $79.6877$ | $1333.638$ | No aplica |
+| MobileNetV2 | $128$ $\times$ $128$ | $744.527$ | INT8 | $0.898519$ | $6.8753$ | $143.320$ | $6.675$ |
+| MobileNetV2 | $128$ $\times$ $128$ | $744.527$ | INT16 | $0.900000$ | $21.5922$ | $166.242$ | $8.900$ |
+| MobileNetV2 | $96$ $\times$ $96$ | $746.734$ | float32 | $0.863704$ | $76.5758$ | $1333.631$ | No aplica |
+| MobileNetV2 | $96$ $\times$ $96$ | $746.734$ | INT8 | $0.864444$ | $8.4222$ | $143.132$ | $5.971$ |
+| MobileNetV2 | $96$ $\times$ $96$ | $746.734$ | INT16 | $0.861481$ | $16.6644$ | $166.046$ | $8.199$ |
+
+Con los resultados obtenidos en esta etapa, se decidio finalmente seguir trabajando con el modelo de Mobile-NetV2, en la resolucion de $256$ $\times$ $256$ y con cuantizacion INT8.
