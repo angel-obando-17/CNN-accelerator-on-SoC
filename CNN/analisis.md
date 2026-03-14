@@ -462,7 +462,7 @@ Despuees de haber validado dos modelos de segmentacion distintos, se tomo en cue
 Finalmente entonces, se evaluaron posibles metodos de segmentacion que sean muy buenos a la hora de realizar su tarea principal, la cual es la de segmentar y que ademas sea facil de implementar ya esa en hardware o en software, de esta forma entonces se llego al metodo HSV, para validar que tan buen resultado podia dar dicho metodo de segmentacion, entonces se procedio a realizar un entrenamiento para los modelos de MoibleNetV1 y MobileNetV2, cada uno en las resoluciones ya vistas anteriormente y en las cuantizaciones respectivas, donde se llego al siguiente resultado:
 
 | Modelo | Resolucion | Tiempo de Entrenamiento ( s ) | Cuantizacion | Accuracy | Inferencia ( ms / img ) | Tamaño del modelo ( kB ) | Tiempo de conversion ( s ) |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|
 | MobileNetV1 | $256$ $\times$ $256$ | $1018.646$ | float32 | $00.894815$ | $75.6133$ | $1112.443$ | No aplica |
 | MobileNetV1 | $256$ $\times$ $256$ | $1018.646$ | INT8 | $0.891852$ | $10.8527$ | $121.171$ | $11.5081$ |
 | MobileNetV1 | $256$ $\times$ $256$ | $1018.646$ | INT16 | $0.893333$ | $69.1207$ | $142.296$ | $21.0533$ |

@@ -1,4 +1,4 @@
-# SEGUNDA BITACORA [ TRABAJO DE GRADO ]
+# BITACORA [ TRABAJO DE GRADO ]
 ---
 
 En este archivo se busca llevar un registro del proceso que se tendra para realizar el trabajo de grado de forma que todo quede evidenciado, todos los requerimientos y lo que se llevara a cabo sera anotado en esta bitacora.
@@ -924,3 +924,109 @@ Los rangos utilizados en el threshold fueron validados empiricamente durante los
 | Marron / lesiones | 5 | 20 | 50 | 255 | 20 | 220 |
 
 Nota: los rangos HSV en OpenCV usan H=[0,179], S=[0,255], V=[0,255]. La implementacion en bare-metal usara la misma escala para mantener consistencia con el entrenamiento.
+
+## ADDRESS-GENERATOR
+
+El [ Address Generator ] es el bloque mas complejo del acelerador en terminos de logica, ya que es quien controla exactamente que dato se lee, de donde, y donde se escribe el resultado en cada ciclo. Sin embargo, su complejidad se reduce drasticamente si dejamos que la "inteligencia" la asuma el Core 0 del PS, que es quien conoce de antemano las dimensiones exactas de cada capa de MobileNetV2, y se las comunica al [ Address Generator ] antes de lanzar cada capa mediante registros de configuracion accesibles mediante AXI-Lite.
+
+Esto significa que el [ Address Generator ] es esencialmente un conjunto de contadores que cuentan hasta los valores que el PS escribio en sus registros. No hay logica de deteccion de dimensiones, no hay inferencia dinamica. El Core 0 del PS es quien asume todas esas tareas, el hardware solo ejecuta.
+
+### Registros de configuracion AXI-Lite
+
+Antes de lanzar cada capa, Core 0 escribe los siguientes registros mediante AXI-Lite:
+
+| Offset | Nombre | Bits | Descripcion |
+|---|---|---|---|
+| 0x00 | REG_START | 1 | Escribir 1 lanza el acelerador. Se limpia automaticamente al terminar. |
+| 0x04 | REG_MODE | 3 | Modo de operacion: 000=Conv3x3, 001=DW3x3, 010=PW1x1, 011=ADD, 100=GAP |
+| 0x08 | REG_H | 9 | Altura del feature map de entrada ( max 256 ) |
+| 0x0C | REG_W | 9 | Ancho del feature map de entrada ( max 256 ) |
+| 0x10 | REG_CIN | 7 | Canales de entrada ( max 64, pero expansion interna V2 puede ser mayor ) |
+| 0x14 | REG_COUT | 7 | Canales de salida ( max 64 ) |
+| 0x18 | REG_STRIDE | 2 | Stride de la convolucion: 1 o 2 |
+| 0x1C | REG_TILE_W | 8 | Ancho del tile activo ( normalmente 128, menos en el ultimo tile ) |
+| 0x20 | REG_LAST_TILE_W | 8 | Ancho del ultimo tile si W no es multiplo de 128 ( W mod 128 ) |
+| 0x24 | REG_HAS_RESIDUAL | 1 | 1 si este bloque tiene residual connection ( ADD despues de PW ) |
+| 0x28 | REG_ADDR_IN | 32 | Direccion base en DDR del feature map de entrada |
+| 0x2C | REG_ADDR_W | 32 | Direccion base en DDR de los pesos de esta capa |
+| 0x30 | REG_ADDR_OUT | 32 | Direccion base en DDR donde se escribira el feature map de salida |
+| 0x34 | REG_ADDR_RES | 32 | Direccion base en DDR del tensor de entrada para la residual ( mismo que ADDR_IN cuando aplica ) |
+| 0x38 | REG_DONE | 1 | Solo lectura. El acelerador escribe 1 aqui al terminar ( genera IRQ ) |
+| 0x3C | REG_POOL_EN | 1 | 1 si se debe aplicar MaxPool 2x2 o GAP al finalizar esta capa |
+
+
+### Formulas de direccion
+
+Para el modo Conv $3 \times 3$ y DepthWise:
+
+$addr\_input = base\_in + (tile\_y \times 8 + row) \times W \times C_{in} + tile\_x \times TILE\_W \times C_{in} + c_i$
+
+$addr\_weight = base\_w + c_o \times C_{in} \times 9 + c_i \times 9 + k_y \times 3 + k_x$
+
+$addr\_output = base\_out + (tile\_y \times 8 + row) \times W_{out} \times C_{out} + tile\_x \times TILE\_W \times C_{out} + c_o$
+
+Donde $W_{out} = W / stride$.
+
+Para el modo PointWise $1 \times 1$:
+
+$addr\_input = base\_in + (tile\_y \times 8 + row) \times W \times C_{in} + tile\_x \times TILE\_W \times C_{in} + c_i$
+
+$addr\_weight = base\_w + c_o \times C_{in} + c_i$
+
+$addr\_output = base\_out + (tile\_y \times 8 + row) \times W \times C_{out} + tile\_x \times TILE\_W \times C_{out} + c_o$
+
+Para el modo ADD (residual):
+
+$addr\_a = base\_out$ (resultado del PW, ya en BRAM)
+
+$addr\_b = base\_res$ (entrada del bloque, guardada en DDR)
+
+El resultado se escribe de vuelta en $base\_out$.
+
+### Tiles parciales en los bordes
+
+Cuando $W$ no es multiplo de $128$, el ultimo tile de cada fila tiene ancho $W \bmod 128$. El PS calcula este valor y lo escribe en REG_LAST_TILE_W. El [ Address Generator ] usa un flag interno `is_last_tile_x` para seleccionar entre TILE_W y LAST_TILE_W como limite del contador de columnas. Esto no requiere logica adicional, solo un multiplexor controlado por ese flag.
+
+Lo mismo aplica verticalmente: cuando $H$ no es multiplo de $8$, el ultimo tile de filas tiene altura $H \bmod 8$, manejado con un registro REG_LAST_TILE_H si se considera necesario, o simplemente con padding a cero en el Input Feature Buffer.
+
+### Tabla de parametros por capa de MobileNetV2 (256x256, 9 clases)
+
+Esta tabla es la que Core 0 tiene almacenada en DDR y consulta para configurar el acelerador antes de cada capa:
+
+| Capa | Modo | H_in | W_in | Cin | Cout | Stride | Residual |
+|---|---|---|---|---|---|---|---|
+| Conv1 | Conv3x3 | 256 | 256 | 3 | 32 | 2 | No |
+| IRB1 - EXP | PW1x1 | 128 | 128 | 32 | 32 | 1 | No |
+| IRB1 - DW | DW3x3 | 128 | 128 | 32 | 32 | 1 | No |
+| IRB1 - PW | PW1x1 | 128 | 128 | 32 | 16 | 1 | No |
+| IRB2 - EXP | PW1x1 | 128 | 128 | 16 | 32 | 1 | No |
+| IRB2 - DW | DW3x3 | 128 | 128 | 32 | 32 | 2 | No |
+| IRB2 - PW | PW1x1 | 64 | 64 | 32 | 24 | 1 | No |
+| IRB3 - EXP | PW1x1 | 64 | 64 | 24 | 48 | 1 | No |
+| IRB3 - DW | DW3x3 | 64 | 64 | 48 | 48 | 1 | No |
+| IRB3 - PW | PW1x1 | 64 | 64 | 48 | 24 | 1 | **Si** |
+| IRB4 - EXP | PW1x1 | 64 | 64 | 24 | 48 | 1 | No |
+| IRB4 - DW | DW3x3 | 64 | 64 | 48 | 48 | 2 | No |
+| IRB4 - PW | PW1x1 | 32 | 32 | 48 | 32 | 1 | No |
+| IRB5 - EXP | PW1x1 | 32 | 32 | 32 | 64 | 1 | No |
+| IRB5 - DW | DW3x3 | 32 | 32 | 64 | 64 | 1 | No |
+| IRB5 - PW | PW1x1 | 32 | 32 | 64 | 32 | 1 | **Si** |
+| IRB6 - EXP | PW1x1 | 32 | 32 | 32 | 64 | 1 | No |
+| IRB6 - DW | DW3x3 | 32 | 32 | 64 | 64 | 2 | No |
+| IRB6 - PW | PW1x1 | 16 | 16 | 64 | 64 | 1 | No |
+| IRB7 - EXP | PW1x1 | 16 | 16 | 64 | 64 | 1 | No |
+| IRB7 - DW | DW3x3 | 16 | 16 | 64 | 64 | 1 | No |
+| IRB7 - PW | PW1x1 | 16 | 16 | 64 | 64 | 1 | **Si** |
+| IRB8 - EXP | PW1x1 | 16 | 16 | 64 | 64 | 1 | No |
+| IRB8 - DW | DW3x3 | 16 | 16 | 64 | 64 | 1 | No |
+| IRB8 - PW | PW1x1 | 16 | 16 | 64 | 64 | 1 | **Si** |
+| IRB9 - EXP | PW1x1 | 16 | 16 | 64 | 64 | 1 | No |
+| IRB9 - DW | DW3x3 | 16 | 16 | 64 | 64 | 1 | No |
+| IRB9 - PW | PW1x1 | 16 | 16 | 64 | 64 | 1 | **Si** |
+| conv_last | PW1x1 | 16 | 16 | 64 | 64 | 1 | No |
+| GAP | GAP | 16 | 16 | 64 | 64 | 1 | No |
+| Dense | FC | 1 | 1 | 64 | 9 | 1 | No |
+
+Nota: los canales de expansion interna (columna EXP en los bloques IRB) pueden superar 64 en los bloques donde $C_{in} \times expand\_ratio > 64$. En esos casos el acelerador procesa esos canales en bloques de 64, iterando. El PS configura el numero de iteraciones necesarias en un registro adicional REG_CIN_ITERS si se considera necesario, o alternativamente se limita el expand_ratio para que los canales internos no superen 64 en ningun bloque, lo cual fue la decision tomada en el entrenamiento con MAX_CH=64.
+
+
