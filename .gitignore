@@ -9,6 +9,12 @@
 /CNN/resultados_experimentos/segmentacion/pares
 /runtime_bare_metal/.vscode
 /CNN/evaluate.py
+/architecture_pl/architecture_pl.cache
+/architecture_pl/architecture_pl.hw
+/architecture_pl/architecture_pl.ip_user_files
+/architecture_pl/architecture_pl.runs
+/architecture_pl/architecture_pl.sim
+/architecture_pl/architecture_pl.srcs/utils_1
 
 *.pdf
 *.docx
@@ -18,3 +24,14 @@
 
 *.keras
 *.tflite
+
+*.log
+*.bat
+*.wdb
+*.prj
+*.tcl
+*.pb
+*.ini
+*.lpr
+*.xpr
+

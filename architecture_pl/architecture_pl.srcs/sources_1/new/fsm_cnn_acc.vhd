@@ -1,0 +1,123 @@
+library ieee;
+use ieee.STD_LOGIC_1164.all;
+
+entity fsm_cnn_accelerator is
+    port(
+        clk, reset       : in std_logic;
+        -- Input signals.
+        reg_start        : in std_logic;
+        reg_mode         : in std_logic_vector( 1 downto 0 );
+        reg_pool_en      : in std_logic;
+        reg_pool_type    : in std_logic;
+        reg_has_residual : in std_logic;
+        compute_done     : in std_logic;
+        post_done        : in std_logic;
+        add_done         : in std_logic;
+        
+        -- Output signals.
+        acc_clear, addr_en, mac_en, mux_sel : out std_logic;
+        relu_en, quant_en, pool_act, pool_type_sel : out std_logic;
+        add_en, addr_red, reg_done, irq_out: out std_logic
+    );
+end fsm_cnn_accelerator;
+
+architecture Behavioral of fsm_cnn_accelerator is
+    type state_type is ( IDLE, COMPUTE, POST, ADD, DONE );
+
+    -- Aux signals.
+    signal current_state, next_state : state_type;
+begin
+
+    process( clk, reset )
+    begin
+        if( reset = '1' ) then
+            -- Reset to the initial state.
+            current_state <= IDLE;
+        elsif( rising_edge( clk ) ) then
+            -- Set current_state to next_state.
+            current_state <= next_state;
+        end if;
+    end process;
+    
+    process( reg_start, reg_mode, reg_pool_en, reg_pool_type, reg_has_residual, compute_done, post_done, add_done )
+    begin
+        -- Default values for signals.
+        acc_clear     <= '0';
+        addr_en       <= '0';
+        mac_en        <= '0';
+        mux_sel       <= '0';
+        relu_en       <= '0';
+        quant_en      <= '0';
+        pool_act      <= '0';
+        pool_type_sel <= '0';
+        add_en        <= '0';
+        addr_red      <= '0';
+        reg_done      <= '0';
+        irq_out       <= '0';
+        next_state <= current_state;
+        
+        case current_state is
+            when IDLE =>
+                if( reg_start = '1' ) then
+                    acc_clear  <= '1';
+                    next_state <= COMPUTE;
+                else
+                    next_state <= IDLE;
+                end if;
+            when COMPUTE =>
+                    addr_en <= '1';
+                    mac_en  <= '1';
+                if( reg_mode = "00" or reg_mode = "01" ) then
+                    -- Set mux_sel = '0' to conv 3x3 and DW 3x3.
+                    mux_sel <= '0';
+                elsif( reg_mode = "10" ) then
+                    -- Set mux_sel = '1' to PW 1x1.
+                    mux_sel <= '1';
+                end if;
+                
+                if( compute_done = '1' ) then
+                    next_state <= POST;
+                else
+                    next_state <= COMPUTE;
+                end if;
+            when POST =>
+                    relu_en  <= '1';
+                    quant_en <= '1';
+                if( reg_pool_en = '1' ) then
+                    -- Set pool_act = '1' and the mux who choose between maxpool and gap
+                    -- is controlled by reg_pool_type.
+                    pool_act <= '1';
+                    pool_type_sel <= reg_pool_type;
+                else
+                    pool_act <= '0';
+                    pool_type_sel <= '0';
+                end if;
+                
+                if( post_done = '1' ) then
+                    if( reg_has_residual = '1' ) then
+                        next_state <= ADD;
+                    else
+                        next_state <= DONE;
+                    end if;
+                else
+                    next_state <= POST;
+                end if;
+            when ADD =>
+                    add_en   <= '1';
+                    addr_red <= '1';
+                if( add_done = '1' ) then 
+                    next_state <= DONE;
+                else
+                    next_state <= ADD;
+                end if;
+            when DONE =>
+                    reg_done <= '1';
+                    irq_out  <= '1';
+                if( reg_start = '1' ) then
+                    next_state <= IDLE;
+                else
+                    next_state <= DONE;
+                end if;
+        end case;
+    end process;
+end Behavioral;

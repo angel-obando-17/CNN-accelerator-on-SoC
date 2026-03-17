@@ -230,79 +230,7 @@ Esta decisión permite separar responsabilidades entre nucleos, reducir la laten
 
 ## MACRO - ARQUITECTURA
 
-```mermaid
-flowchart TB
-    %% =========================
-    %% External World
-    %% =========================
-    EXT["Scene / Plants"]
-
-    %% =========================
-    %% Processing System
-    %% =========================
-    subgraph PS["Processing System (PS)"]
-        PS1["ARM Cortex-A9<br/>(Dual-Core)"]
-        PS2["Runtime Bare-Metal<br/>(Control & Concurrency)"]
-        PS3["Drivers<br/>(AXI / DMA)"]
-
-        PS1 --> PS2
-        PS2 --> PS3
-    end
-
-    %% =========================
-    %% AXI Interconnect
-    %% =========================
-    AXIL["AXI-Lite<br/>(Control)"]
-    AXIHP["AXI-HP<br/>(High Performance Data)"]
-
-    %% =========================
-    %% Programmable Logic
-    %% =========================
-    subgraph PL["Programmable Logic (PL)"]
-        PL1["MIPI CSI RX"]
-        PL2["Pre-processing"]
-        PL3["CNN Accelerator"]
-        DMA["DMA Engine"]
-    end
-
-    %% =========================
-    %% DDR Memory
-    %% =========================
-    subgraph DDR["DDR3 (512 MB)"]
-        DDR1["Camera Frames"]
-        DDR2["Feature Maps"]
-        DDR3["CNN Weights"]
-    end
-
-    %% =========================    
-    %% Connections
-    %% =========================
-    EXT --> PL1
-
-    %% Capture path
-    PL1 --> DMA
-    DMA <--> DDR1
-
-    %% Preprocessing path
-    DMA <--> PL2
-    DMA --> DDR2
-
-    %% CNN execution path
-    DDR2 <--> DMA
-    DDR3 --> DMA
-    DMA <--> PL3
-
-    %% Control paths
-    PS3 --> AXIL
-    AXIL --> PL2
-    AXIL --> PL3
-
-    PS3 --> AXIHP
-    AXIHP --> DMA
-
-    PS3 <--> DDR
-
-```
+![Structure of a CNN](images/Macro_Arquitectura.png)
 
 ```mermaid
 
@@ -345,69 +273,11 @@ En la macro-arquitectura podemos apreciar como se van a distribuir las tareas en
 
 ## ARQUITECTURA INTERNA DEL CNN ACCELERATOR
 
-```mermaid
-flowchart TB
-    subgraph CNN["CNN Accelerator (PL)"]
+![Structure of a CNN](images/cnn_architecture.png)
 
-        CTRL["Control FSM<br/>(Mode Select:<br/>Conv3x3 / DW3x3 / PW1x1 / ADD)"]
-        ADDR["Address Generator"]
+La maquina de estados que controla todo es la siguiente:
 
-        IN_BUF["Input Feature Buffer (BRAM)"]
-        W_BUF["Weight Buffer (BRAM)"]
-
-        LINE["Line Buffer (3x3 Mode Only)"]
-        WIN["Window Generator (3x3 Mode Only)"]
-
-        MUX_IN["Input MUX<br/>(Spatial / Direct)"]
-
-        MAC["MAC Array (16 PEs)"]
-        ACC["Accumulator Bank (16 x INT32)"]
-
-        RELU6["ReLU6 (clamp 0..6)"]
-        QUANT["Quantizer (Shift + Clamp INT8)"]
-
-        ADD["ADD Unit (Residual)<br/>16 sumadores INT8 en paralelo"]
-
-        POOL["Pooling / GAP (Optional)"]
-
-        OUT_BUF["Output Buffer (BRAM)"]
-
-        %% Spatial path (3x3 Conv & Depthwise)
-        IN_BUF --> LINE
-        LINE --> WIN
-        WIN --> MUX_IN
-
-        %% Direct path (1x1 Conv)
-        IN_BUF --> MUX_IN
-
-        %% Core compute
-        MUX_IN --> MAC
-        W_BUF --> MAC
-        MAC --> ACC
-        ACC --> RELU6
-        RELU6 --> QUANT
-        QUANT --> ADD
-        ADD --> POOL
-        POOL --> OUT_BUF
-
-        %% Residual path: IN_BUF -> ADD (cuando aplica)
-        IN_BUF -->|"residual (stride=1, Cin=Cout)"| ADD
-
-        %% Control path
-        CTRL --> ADDR
-        CTRL --> MAC
-        CTRL --> ACC
-        CTRL --> RELU6
-        CTRL --> QUANT
-        CTRL --> ADD
-        CTRL --> POOL
-        CTRL --> MUX_IN
-        ADDR --> IN_BUF
-        ADDR --> W_BUF
-        ADDR --> OUT_BUF
-
-    end
-```
+![Structure of a CNN](images/asm_cnn_accelerator.png)
 
 Como se explico anteriormente, el acelerador soportara 4 modos de operacion: Conv normal $3$ $\times$ $3$, DepthWise $3$ $\times$ $3$, PointWise $1$ $\times$ $1$, y ADD (suma elemento a elemento para las residual connections de MobileNetV2). La FSM del acelerador genera las señales de control correspondientes segun el modo activo en cada momento.
 
