@@ -1,5 +1,5 @@
 library ieee;
-use ieee.STD_LOGIC_1164.all;
+use ieee.std_logic_1164.all;
 
 entity fsm_cnn_accelerator is
     port(
@@ -17,7 +17,7 @@ entity fsm_cnn_accelerator is
         -- Output signals.
         acc_clear, addr_en, mac_en, mux_sel : out std_logic;
         relu_en, quant_en, pool_act, pool_type_sel : out std_logic;
-        add_en, addr_red, reg_done, irq_out: out std_logic
+        add_en, addr_res, reg_done, irq_out: out std_logic
     );
 end fsm_cnn_accelerator;
 
@@ -39,7 +39,7 @@ begin
         end if;
     end process;
     
-    process( reg_start, reg_mode, reg_pool_en, reg_pool_type, reg_has_residual, compute_done, post_done, add_done )
+    process( current_state, reg_start, reg_mode, reg_pool_en, reg_pool_type, reg_has_residual, compute_done, post_done, add_done )
     begin
         -- Default values for signals.
         acc_clear     <= '0';
@@ -51,15 +51,15 @@ begin
         pool_act      <= '0';
         pool_type_sel <= '0';
         add_en        <= '0';
-        addr_red      <= '0';
+        addr_res      <= '0';
         reg_done      <= '0';
         irq_out       <= '0';
         next_state <= current_state;
         
         case current_state is
             when IDLE =>
+                acc_clear  <= '1';
                 if( reg_start = '1' ) then
-                    acc_clear  <= '1';
                     next_state <= COMPUTE;
                 else
                     next_state <= IDLE;
@@ -104,7 +104,7 @@ begin
                 end if;
             when ADD =>
                     add_en   <= '1';
-                    addr_red <= '1';
+                    addr_res <= '1';
                 if( add_done = '1' ) then 
                     next_state <= DONE;
                 else

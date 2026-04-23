@@ -808,7 +808,7 @@ Antes de lanzar cada capa, Core 0 escribe los siguientes registros mediante AXI-
 | Offset | Nombre | Bits | Descripcion |
 |---|---|---|---|
 | 0x00 | REG_START | 1 | Escribir 1 lanza el acelerador. Se limpia automaticamente al terminar. |
-| 0x04 | REG_MODE | 3 | Modo de operacion: 000=Conv3x3, 001=DW3x3, 010=PW1x1, 011=ADD, 100=GAP |
+| 0x04 | REG_MODE | 2 | Modo de operacion: 00=Conv3x3, 01=DW3x3, 10=PW1x1 |
 | 0x08 | REG_H | 9 | Altura del feature map de entrada ( max 256 ) |
 | 0x0C | REG_W | 9 | Ancho del feature map de entrada ( max 256 ) |
 | 0x10 | REG_CIN | 7 | Canales de entrada ( max 64, pero expansion interna V2 puede ser mayor ) |
