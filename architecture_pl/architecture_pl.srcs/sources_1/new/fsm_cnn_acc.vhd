@@ -7,22 +7,23 @@ entity fsm_cnn_accelerator is
         -- Input signals.
         reg_start        : in std_logic;
         reg_mode         : in std_logic_vector( 1 downto 0 );
+        pixel_done       : in std_logic;
         reg_pool_en      : in std_logic;
         reg_pool_type    : in std_logic;
-        reg_has_residual : in std_logic;
-        compute_done     : in std_logic;
         post_done        : in std_logic;
+        layer_done       : in std_logic;
+        reg_has_residual : in std_logic;
         add_done         : in std_logic;
         
         -- Output signals.
-        acc_clear, addr_en, mac_en, mux_sel : out std_logic;
-        relu_en, quant_en, pool_act, pool_type_sel : out std_logic;
+        acc_clear, addr_en, mac_en, mux_sel, acc_bank_enable : out std_logic;
+        mac_clear, relu_en, quant_en, pool_act, pool_type_sel : out std_logic;
         add_en, addr_res, reg_done, irq_out: out std_logic
     );
 end fsm_cnn_accelerator;
 
 architecture Behavioral of fsm_cnn_accelerator is
-    type state_type is ( IDLE, COMPUTE, POST, ADD, DONE );
+    type state_type is ( IDLE, COMPUTE, LATCH, POST, ADD, DONE );
 
     -- Aux signals.
     signal current_state, next_state : state_type;
@@ -39,22 +40,33 @@ begin
         end if;
     end process;
     
-    process( current_state, reg_start, reg_mode, reg_pool_en, reg_pool_type, reg_has_residual, compute_done, post_done, add_done )
+    process( current_state, 
+             reg_start, 
+             reg_mode, 
+             pixel_done,
+             reg_pool_en, 
+             reg_pool_type, 
+             post_done, 
+             layer_done,
+             reg_has_residual, 
+             add_done )
     begin
         -- Default values for signals.
-        acc_clear     <= '0';
-        addr_en       <= '0';
-        mac_en        <= '0';
-        mux_sel       <= '0';
-        relu_en       <= '0';
-        quant_en      <= '0';
-        pool_act      <= '0';
-        pool_type_sel <= '0';
-        add_en        <= '0';
-        addr_res      <= '0';
-        reg_done      <= '0';
-        irq_out       <= '0';
-        next_state <= current_state;
+        acc_clear       <= '0';
+        addr_en         <= '0';
+        mac_en          <= '0';
+        mux_sel         <= '0';
+        acc_bank_enable <= '0';
+        mac_clear       <= '0';
+        relu_en         <= '0';
+        quant_en        <= '0';
+        pool_act        <= '0';
+        pool_type_sel   <= '0';
+        add_en          <= '0';
+        addr_res        <= '0';
+        reg_done        <= '0';
+        irq_out         <= '0';
+        next_state      <= current_state;
         
         case current_state is
             when IDLE =>
@@ -65,8 +77,8 @@ begin
                     next_state <= IDLE;
                 end if;
             when COMPUTE =>
-                    addr_en <= '1';
-                    mac_en  <= '1';
+                addr_en <= '1';
+                mac_en  <= '1';
                 if( reg_mode = "00" or reg_mode = "01" ) then
                     -- Set mux_sel = '0' to conv 3x3 and DW 3x3.
                     mux_sel <= '0';
@@ -75,14 +87,18 @@ begin
                     mux_sel <= '1';
                 end if;
                 
-                if( compute_done = '1' ) then
-                    next_state <= POST;
+                if( pixel_done = '1' ) then
+                    next_state <= LATCH;
                 else
                     next_state <= COMPUTE;
                 end if;
+            when LATCH => 
+                acc_bank_enable <= '1';
+                mac_clear <= '1';   
+                next_state <= POST; 
             when POST =>
-                    relu_en  <= '1';
-                    quant_en <= '1';
+                relu_en  <= '1';
+                quant_en <= '1';
                 if( reg_pool_en = '1' ) then
                     -- Set pool_act = '1' and the mux who choose between maxpool and gap
                     -- is controlled by reg_pool_type.
@@ -94,25 +110,29 @@ begin
                 end if;
                 
                 if( post_done = '1' ) then
-                    if( reg_has_residual = '1' ) then
-                        next_state <= ADD;
+                    if( layer_done = '1' ) then
+                        if( reg_has_residual = '1' ) then
+                            next_state <= ADD;
+                        else
+                            next_state <= DONE;
+                        end if;
                     else
-                        next_state <= DONE;
+                        next_state <= COMPUTE;
                     end if;
                 else
                     next_state <= POST;
                 end if;
             when ADD =>
-                    add_en   <= '1';
-                    addr_res <= '1';
+                add_en   <= '1';
+                addr_res <= '1';
                 if( add_done = '1' ) then 
                     next_state <= DONE;
                 else
                     next_state <= ADD;
                 end if;
             when DONE =>
-                    reg_done <= '1';
-                    irq_out  <= '1';
+                reg_done <= '1';
+                irq_out  <= '1';
                 if( reg_start = '1' ) then
                     next_state <= IDLE;
                 else

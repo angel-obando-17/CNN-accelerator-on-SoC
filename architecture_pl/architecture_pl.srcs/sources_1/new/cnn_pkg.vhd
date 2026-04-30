@@ -7,4 +7,5 @@ package cnn_pkg is
 
     type int8_array  is array ( natural range <> ) of signed(  7 downto 0 );
     type int32_array is array ( natural range <> ) of signed( 31 downto 0 );
+    type reg_array   is array ( natural range <> ) of std_logic_vector( 31 downto 0 );  
 end package cnn_pkg;

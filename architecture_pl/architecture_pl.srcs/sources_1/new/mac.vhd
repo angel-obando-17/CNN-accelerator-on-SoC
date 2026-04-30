@@ -4,11 +4,11 @@ use ieee.numeric_std.all;
 
 entity mac is
     port(
-       clk, reset : in std_logic;
-       enable     : in std_logic;
-       clear      : in std_logic;
-       weight     : in signed( 7 downto 0 );
-       act        : in signed( 7 downto 0 );
+       clk, reset : in  std_logic;
+       enable     : in  std_logic;
+       clear      : in  std_logic;
+       weight     : in  signed( 7 downto 0 );
+       act        : in  signed( 7 downto 0 );
        acc_out    : out signed( 31 downto 0 )
     );
 end mac;
