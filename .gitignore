@@ -16,6 +16,7 @@
 /architecture_pl/architecture_pl.sim
 /architecture_pl/architecture_pl.srcs/utils_1
 /architecture_pl/architecture_pl.srcs/sources_1/new/relu_quant.vhd
+/architecture_pl/architecture_pl.srcs/sources_1/new/tb_addr_generator.vhd
 
 *.pdf
 *.docx

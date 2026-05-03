@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity fsm_addr_generator is
-    port( 
+    port(
         clk, reset     : in std_logic;
         -- Input signals.
         addr_en        : in std_logic;
@@ -12,7 +12,7 @@ entity fsm_addr_generator is
         max_x          : in std_logic_vector( 6 downto 0 );
         max_y          : in std_logic_vector( 2 downto 0 );
         max_tile_x     : in std_logic;
-        max_tile_y     : in std_logic_vector( 4 downto 0 );     
+        max_tile_y     : in std_logic_vector( 4 downto 0 );
         -- Output signals.
         counter_reset  : out std_logic;
         pixel_done     : out std_logic;
@@ -27,8 +27,8 @@ entity fsm_addr_generator is
 end fsm_addr_generator;
 
 architecture Behavioral of fsm_addr_generator is
-    type state_type is ( IDLE, ACCUM, PIXEL_END );
-    
+    type state_type is ( IDLE, ACCUM, PIXEL_END, LAYER_CHECK );
+
     -- Aux signals.
     signal current_state, next_state : state_type;
     signal sig_layer_done : std_logic;
@@ -47,7 +47,7 @@ begin
     y_counter      <= sig_y_cnt;
     tile_x_counter <= sig_tile_x_cnt;
     tile_y_counter <= sig_tile_y_cnt;
-    
+
     process( clk, reset )
     begin
         if( reset = '1' ) then
@@ -58,16 +58,27 @@ begin
             sig_y_cnt      <= ( others => '0' );
             sig_tile_x_cnt <= '0';
             sig_tile_y_cnt <= ( others => '0' );
+            sig_layer_done <= '0';
         elsif( rising_edge( clk ) ) then
             current_state <= next_state;
-            
+
             -- Increase the value of inner_counter.
             if( current_state = ACCUM ) then
                 sig_inner_cnt <= std_logic_vector( unsigned( sig_inner_cnt ) + 1 );
             end if;
             
-            -- Increase the outer_counters in hierarchy order.
-            if( current_state = PIXEL_END and addr_en = '1' and sig_layer_done = '0' ) then
+            if( current_state = PIXEL_END ) then
+                sig_layer_done <= '1' when(
+                    sig_co_cnt     = max_co     and
+                    sig_x_cnt      = max_x      and
+                    sig_y_cnt      = max_y      and
+                    sig_tile_x_cnt = max_tile_x and
+                    sig_tile_y_cnt = max_tile_y
+                ) else '0';
+            end if;
+            
+            -- Increase the outer counters in hierarchy order.
+            if( current_state = LAYER_CHECK and sig_layer_done = '0' ) then
                 sig_inner_cnt <= ( others => '0' );
                 if( sig_co_cnt = max_co ) then
                     sig_co_cnt <= ( others => '0' );
@@ -92,7 +103,7 @@ begin
                 end if;
             end if;
             
-            -- Reset all when comeback to IDLE state.
+            -- Reset all when returning to IDLE state.
             if( next_state = IDLE ) then
                 sig_inner_cnt  <= ( others => '0' );
                 sig_co_cnt     <= ( others => '0' );
@@ -100,37 +111,27 @@ begin
                 sig_y_cnt      <= ( others => '0' );
                 sig_tile_x_cnt <= '0';
                 sig_tile_y_cnt <= ( others => '0' );
+                sig_layer_done <= '0';
             end if;
-            
+
         end if;
     end process;
-    
+
     process(
         current_state,
         addr_en,
         max_inner,
-        max_co,
-        max_x,
-        max_y,
-        max_tile_x,
-        max_tile_y,
         sig_layer_done,
-        sig_inner_cnt,
-        sig_co_cnt,
-        sig_x_cnt,
-        sig_y_cnt,
-        sig_tile_x_cnt,
-        sig_tile_y_cnt
+        sig_inner_cnt
     )
-    
+
     begin
         counter_reset  <= '0';
         pixel_done     <= '0';
-        sig_layer_done <= '0';
         next_state     <= current_state;
-        
+
         case current_state is
-            when IDLE => 
+            when IDLE =>
                 counter_reset <= '1';
                 if( addr_en = '1' ) then
                     next_state <= ACCUM;
@@ -144,23 +145,19 @@ begin
                     next_state <= ACCUM;
                 end if;
             when PIXEL_END =>
-                pixel_done     <= '1';
-                sig_layer_done <= '1' when( 
-                    sig_co_cnt     = max_co     and
-                    sig_x_cnt      = max_x      and
-                    sig_y_cnt      = max_y      and
-                    sig_tile_x_cnt = max_tile_x and
-                    sig_tile_y_cnt = max_tile_y
-                ) else '0'; 
+                pixel_done <= '1';
                 if( addr_en = '1' ) then
-                    if( sig_layer_done = '1' ) then
-                        next_state <= IDLE;
-                    else
-                        next_state <= ACCUM;
-                    end if;
+                    next_state <= LAYER_CHECK;
                 else
                     next_state <= PIXEL_END;
-                end if;                                  
-        end case;   
+                end if;
+            when LAYER_CHECK =>
+                pixel_done <= '1';
+                if( sig_layer_done = '1' ) then
+                    next_state <= IDLE;
+                else
+                    next_state <= ACCUM;
+                end if;
+        end case;
     end process;
 end Behavioral;
