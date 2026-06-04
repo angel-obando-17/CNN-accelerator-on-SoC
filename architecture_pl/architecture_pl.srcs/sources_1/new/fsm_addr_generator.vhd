@@ -22,7 +22,8 @@ entity fsm_addr_generator is
         x_counter      : out std_logic_vector( 6 downto 0 );
         y_counter      : out std_logic_vector( 2 downto 0 );
         tile_x_counter : out std_logic;
-        tile_y_counter : out std_logic_vector( 4 downto 0 )
+        tile_y_counter : out std_logic_vector( 4 downto 0 );
+        mac_valid      : out std_logic
     );
 end fsm_addr_generator;
 
@@ -128,6 +129,7 @@ begin
     begin
         counter_reset  <= '0';
         pixel_done     <= '0';
+        mac_valid      <= '1';
         next_state     <= current_state;
 
         case current_state is
@@ -139,6 +141,9 @@ begin
                     next_state <= IDLE;
                 end if;
             when ACCUM =>
+                if( sig_inner_cnt = "0000000000" ) then
+                    mac_valid <= '0';
+                end if;
                 if( max_inner = sig_inner_cnt ) then
                     next_state <= PIXEL_END;
                 else

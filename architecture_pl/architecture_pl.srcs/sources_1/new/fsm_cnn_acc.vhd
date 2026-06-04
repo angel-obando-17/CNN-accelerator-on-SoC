@@ -5,6 +5,7 @@ entity fsm_cnn_accelerator is
     port(
         clk, reset       : in std_logic;
         -- Input signals.
+        mac_valid        : in std_logic;
         reg_start        : in std_logic;
         reg_mode         : in std_logic_vector( 1 downto 0 );
         pixel_done       : in std_logic;
@@ -40,7 +41,8 @@ begin
         end if;
     end process;
     
-    process( current_state, 
+    process( current_state,
+             mac_valid, 
              reg_start, 
              reg_mode, 
              pixel_done,
@@ -78,7 +80,7 @@ begin
                 end if;
             when COMPUTE =>
                 addr_en <= '1';
-                mac_en  <= '1';
+                mac_en  <= mac_valid;
                 if( reg_mode = "00" or reg_mode = "01" ) then
                     -- Set mux_sel = '0' to conv 3x3 and DW 3x3.
                     mux_sel <= '0';

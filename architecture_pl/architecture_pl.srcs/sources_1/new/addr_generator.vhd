@@ -18,9 +18,11 @@ entity addr_generator is
         max_tile_x     : in  std_logic;
         max_tile_y     : in  std_logic_vector( 4 downto 0 );
         -- Output signals.
-        addr_in        : out std_logic_vector( 16 downto 0 );
+        mac_valid      : out std_logic;
+        addr_in        : out std_logic_vector( 12 downto 0 );
         addr_w         : out std_logic_vector( 11 downto 0 );
         addr_out       : out std_logic_vector( 11 downto 0 );
+        byte_sel       : out std_logic_vector( 3 downto 0 );
         ---- To accelerator FSM.
         pixel_done     : out std_logic;
         layer_done     : out std_logic;
@@ -41,6 +43,7 @@ architecture Behavioral of addr_generator is
     
     -- Aux signals.
     ---- Internal signals from FSM.
+    signal sig_mac_valid     : std_logic;
     signal sig_pixel_done    : std_logic;
     signal sig_layer_done    : std_logic;
     signal sig_counter_reset : std_logic;
@@ -71,11 +74,13 @@ begin
             x_counter      => x_counter,
             y_counter      => y_counter,
             tile_x_counter => tile_x_counter,
-            tile_y_counter => tile_y_counter
+            tile_y_counter => tile_y_counter,
+            mac_valid      => sig_mac_valid
         );
 
     pixel_done <= sig_pixel_done;
     layer_done <= sig_layer_done;
+    mac_valid  <= sig_mac_valid;
 
     ci_out <= std_logic_vector( sig_ci );
     ky_out <= std_logic_vector( sig_ky );
@@ -152,10 +157,11 @@ begin
     variable tile_w : unsigned( 7  downto 0 );  -- max 128.
     variable num_co : unsigned( 2  downto 0 );  
     -- To addr_in.
-    variable row    : unsigned( 3  downto 0 );  -- y + ky - 1.
-    variable col    : unsigned( 7  downto 0 );  -- x + kx - 1.
-    variable term1  : unsigned( 16 downto 0 );  -- row * TILE_W * Cin. 
-    variable term2  : unsigned( 16 downto 0 );  -- col * Cin.
+    variable row         : unsigned( 3 downto 0 );
+    variable col         : unsigned( 7 downto 0 );
+    variable cin_groups  : unsigned( 2 downto 0 );  -- Cin/16
+    variable term1       : unsigned( 12 downto 0 ); -- row * TILE_W * cin_groups
+    variable term2       : unsigned( 12 downto 0 ); -- col * cin_groups
     -- To addr_w.
         -- To Conv 3x3.
     variable term3  : unsigned( 11 downto 0 );  -- co * Cin * 9.
@@ -174,11 +180,9 @@ begin
         num_co := resize( unsigned( max_co ), 3 ) + 1;
         
         -- addr_in
-        row   := resize( unsigned( y_counter ), 4 ) + resize( sig_ky, 4 ) - 1;
-        col   := resize( unsigned( x_counter ), 8 ) + resize( sig_kx, 8 ) - 1;
-        term1 := resize( row * tile_w * unsigned( cin ), 17 );
-        term2 := resize( col * unsigned( cin ), 17 );
-        addr_in <= std_logic_vector( term1 + term2 + resize( sig_ci, 17 ) );
+        row        := resize( unsigned( y_counter ), 4 ) + resize( sig_ky, 4 ) - 1;
+        col        := resize( unsigned( x_counter ), 8 ) + resize( sig_kx, 8 ) - 1;
+        cin_groups := resize( unsigned( cin( 6 downto 4 ) ), 3 );  -- Cin / 16
                 
         -- addr_w
         term3 := resize( unsigned( co_counter ) * unsigned( cin ) * to_unsigned( 9, 4 ), 12 );
@@ -186,6 +190,21 @@ begin
         term5 := resize( sig_ky * to_unsigned( 3, 2 ), 4 );
         term6 := resize( unsigned( co_counter ) * to_unsigned( 9, 4 ), 6 );
         term7 := resize( unsigned( co_counter ) * unsigned( cin ), 9 );
+            
+        case reg_mode is
+            when "01" =>
+                -- DW3x3: word = base_pixel + co_counter (cada grupo de 16 canales)
+                term1 := resize( row * tile_w * cin_groups, 13 );
+                term2 := resize( col * cin_groups, 13 );
+                addr_in  <= std_logic_vector( term1 + term2 + resize( unsigned( co_counter ), 13 ) );
+                byte_sel <= ( others => '0' );
+            when others =>
+                -- Conv3x3 y PW1x1: word = base_pixel + sig_ci/16, byte = sig_ci mod 16
+                term1 := resize( row * tile_w * cin_groups, 13 );
+                term2 := resize( col * cin_groups, 13 );
+                addr_in  <= std_logic_vector( term1 + term2 + resize( unsigned( sig_ci( 6 downto 4 ) ), 13 ) );
+                byte_sel <= std_logic_vector( sig_ci( 3 downto 0 ) );
+        end case;
         
         case reg_mode is
             when "00" =>
@@ -197,7 +216,7 @@ begin
             when others =>
                 addr_w <= ( others => '0' );
         end case;
-        
+            
         -- addr_out.
         term8 := resize( unsigned( y_counter ) * ( tile_w * num_co ), 12 );
         term9 := resize( unsigned( x_counter ) * num_co, 10 );
