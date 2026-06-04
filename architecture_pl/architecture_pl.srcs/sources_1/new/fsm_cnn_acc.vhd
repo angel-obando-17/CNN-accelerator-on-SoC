@@ -14,7 +14,6 @@ entity fsm_cnn_accelerator is
         post_done        : in std_logic;
         layer_done       : in std_logic;
         reg_has_residual : in std_logic;
-        add_done         : in std_logic;
         
         -- Output signals.
         acc_clear, addr_en, mac_en, mux_sel, acc_bank_enable : out std_logic;
@@ -24,7 +23,7 @@ entity fsm_cnn_accelerator is
 end fsm_cnn_accelerator;
 
 architecture Behavioral of fsm_cnn_accelerator is
-    type state_type is ( IDLE, COMPUTE, LATCH, POST, ADD, DONE );
+    type state_type is ( IDLE, COMPUTE, LATCH, POST, DONE );
 
     -- Aux signals.
     signal current_state, next_state : state_type;
@@ -50,8 +49,7 @@ begin
              reg_pool_type, 
              post_done, 
              layer_done,
-             reg_has_residual, 
-             add_done )
+             reg_has_residual )
     begin
         -- Default values for signals.
         acc_clear       <= '0';
@@ -101,6 +99,8 @@ begin
             when POST =>
                 relu_en  <= '1';
                 quant_en <= '1';
+                add_en   <= reg_has_residual;
+                addr_res <= reg_has_residual;
                 if( reg_pool_en = '1' ) then
                     -- Set pool_act = '1' and the mux who choose between maxpool and gap
                     -- is controlled by reg_pool_type.
@@ -113,24 +113,12 @@ begin
                 
                 if( post_done = '1' ) then
                     if( layer_done = '1' ) then
-                        if( reg_has_residual = '1' ) then
-                            next_state <= ADD;
-                        else
-                            next_state <= DONE;
-                        end if;
+                        next_state <= DONE;
                     else
                         next_state <= COMPUTE;
                     end if;
                 else
                     next_state <= POST;
-                end if;
-            when ADD =>
-                add_en   <= '1';
-                addr_res <= '1';
-                if( add_done = '1' ) then 
-                    next_state <= DONE;
-                else
-                    next_state <= ADD;
                 end if;
             when DONE =>
                 reg_done <= '1';

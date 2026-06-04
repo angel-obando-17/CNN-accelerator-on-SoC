@@ -2,10 +2,10 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity weight_buf is
+entity outputf_buf is
     generic(
         DATA_WIDTH : integer := 128; -- Bits por palabra.
-        ADDR_WIDTH : integer := 8    -- Bits de dirección ( 256 posiciones ).
+        ADDR_WIDTH : integer := 12   -- Bits de dirección ( 4096 posiciones ).
     );
     port(
         clk      : in  std_logic;
@@ -16,22 +16,22 @@ entity weight_buf is
         data_in  : in  std_logic_vector( DATA_WIDTH - 1 downto 0 );
         data_out : out std_logic_vector( DATA_WIDTH - 1 downto 0 )
     );
-end weight_buf;
+end outputf_buf;
 
-architecture Behavioral of weight_buf is
+architecture Behavioral of outputf_buf is
     type buf_bram is array( 0 to ( 2 ** ADDR_WIDTH ) - 1 )of std_logic_vector( DATA_WIDTH - 1 downto 0 );
-    signal buf_weight : buf_bram;
+    signal buf_outputf : buf_bram;
 begin
 
     process( clk )
     begin
         if( rising_edge( clk ) ) then
             if( w_enable = '1' ) then
-                buf_weight( to_integer( unsigned( wr_addr ) ) ) <= data_in;
+                buf_outputf( to_integer( unsigned( wr_addr ) ) ) <= data_in;
             end if;
             
             if( r_enable = '1' ) then
-                data_out <= buf_weight( to_integer( unsigned( rd_addr ) ) );
+                data_out <= buf_outputf( to_integer( unsigned( rd_addr ) ) );
             end if;
         end if;
     end process;
