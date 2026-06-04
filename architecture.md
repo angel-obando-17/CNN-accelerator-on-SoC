@@ -69,3 +69,49 @@ El [ Output Buffer ] tambien usa palabras de 128 bits, y almacena los feature ma
 $addr\_out = y \times TILE\_W \times G_{out} + x \times G_{out} + co\_counter$
 
 Aqui $y$ y $x$ son los contadores espaciales del tile actual, y $co\_counter$ indica a cual de los grupos de 16 canales de salida estamos escribiendo en este momento. El resultado es que la escritura tambien es secuencial dentro de cada pixel, lo cual al igual que en el Weight Buffer es beneficioso para la BRAM.
+
+---
+
+## BLOQUE [ quant_relu ]
+
+### Que hace el bloque
+
+El [ quant_relu ] es el bloque de post-procesamiento que toma los 16 acumuladores INT32 que salen del [ Accumulator Bank ] y los convierte en 16 valores INT8 listos para ser escritos en el [ Output Buffer ]. Hace tres cosas en secuencia sobre cada uno de los 16 valores en paralelo, con una latencia de 1 ciclo de reloj.
+
+### Por que se cuantiza primero y luego se aplica ReLU6
+
+El orden correcto es primero cuantizar ( shift + clamp ) y luego aplicar ReLU6. Esto es porque ReLU6 trabaja sobre valores ya en escala INT8, necesitando comparar contra $0$ y contra el valor cuantizado de $6.0$. Si se aplicara ReLU6 antes del shift, se estaria comparando un valor INT32 gigante contra umbrales INT8, lo cual no tiene ningún sentido en terminos de la escala de los datos.
+
+### Paso 1 — Shift aritmetico derecho
+
+El acumulador INT32 contiene la suma de muchos productos INT8 $\times$ INT8. Ese valor esta "escalado", es decir, su magnitud es mucho mayor de lo que deberia ser en INT8. Formalmente, si los pesos tienen scale $S_w$ y las activaciones tienen scale $S_a$, entonces el acumulador esta en escala $S_w \times S_a$, mientras que el resultado de salida debe estar en escala $S_{out}$. Para pasar de una escala a la otra se hace un desplazamiento aritmetico a la derecha:
+
+$resultado = acumulador \gg shift$
+
+Donde $shift$ es la cantidad de bits a desplazar, calculada como:
+
+$shift = \log_2 \left( \frac{S_w \times S_a}{S_{out}} \right)$
+
+Es importante que el desplazamiento sea **aritmetico** ( no logico ), ya que los valores pueden ser negativos y hay que preservar el signo. El PS conoce todos los scale factors de cada capa porque los extrae del modelo cuantizado durante la calibracion offline, calcula el valor de $shift$ para cada capa, y lo escribe en el registro REG_SHIFT por AXI-Lite antes de lanzar el acelerador. El hardware no sabe nada de scales ni de floating point, solo recibe el numero entero y desplaza.
+
+### Paso 2 — Clamp a INT8
+
+Despues del shift el valor deberia caber en INT8, pero por efectos de saturacion puede salirse del rango $[-128, 127]$. El clamp se hace **antes de truncar los bits**, comparando el valor INT32 desplazado contra los limites:
+
+* Si el valor $> 127$ entonces se satura a $127$.
+* Si el valor $< -128$ entonces se satura a $-128$.
+* Si el valor esta dentro del rango, se trunca normalmente a 8 bits.
+
+### Paso 3 — ReLU6
+
+ReLU6 es una variante de ReLU que ademas de poner en cero los valores negativos, los limita por arriba en $6.0$. En INT8, el valor $6.0$ no es siempre el numero $6$, ya que depende del scale factor de la capa. Por eso existe el puerto $relu6\_val$ que recibe el valor cuantizado de $6.0$ para esa capa especifico, calculado por el PS y enviado por AXI-Lite antes de lanzar el acelerador. La logica es:
+
+* Si $clamped < 0$ entonces la salida es $0$.
+* Si $clamped > relu6\_val$ entonces la salida es $relu\_in$.
+* Si $0 \leq clamped \leq relu6\_val$ entonces la salida es $clamped$.
+
+Si $relu\_en = 0$ entonces se omite este paso y el valor clampedo pasa directo como salida.
+
+### Latencia y paralelismo
+
+El bloque procesa los 16 canales en paralelo dentro de un unico proceso sincrono, por lo que la latencia total es de exactamente 1 ciclo de reloj. Un ciclo despues de que $quant\_en = 1$, los 16 valores INT8 estan disponibles en $data\_out$ y la señal $valid\_out = 1$, que es la que usa la FSM como $post\_done$ para saber que puede avanzar al siguiente estado.
