@@ -12,6 +12,28 @@ El inconveniente es exactamente ese, que el bus del IFBuffer debe ser de 128 bit
 
 ---
 
+## BLOQUES DESCARTADOS DE LA ARQUITECTURA ORIGINAL
+
+En el diseño inicial de la arquitectura del acelerador se habian contemplado dos bloques para manejar el acceso a los datos de entrada en los modos de convolucion $3 \times 3$: el [ Line Buffer ] y el [ Window Generator ]. Durante el proceso de implementacion del [ Address Generator ] se encontro que ambos bloques eran innecesarios, y se tomo la decision de descartarlos definitivamente. A continuacion se explica el razonamiento detras de esta decision para cada uno.
+
+### Window Generator
+
+El proposito original del [ Window Generator ] era recibir las filas organizadas por el [ Line Buffer ] y ensamblarlas en una ventana de $3 \times 3$ para entregarla al [ MAC Array ], de forma que cada MAC supiera exactamente con que pixel debia trabajar en cada ciclo.
+
+Este bloque se descarto porque el [ Address Generator ] ya implementa implicitamente la logica de ventana deslizante. Su inner loop itera sobre los offsets del kernel $k_x \in \{0, 1, 2\}$ y $k_y \in \{0, 1, 2\}$, calculando en cada ciclo la direccion exacta del elemento correspondiente en el [ IFBuffer ]:
+
+$addr\_in = (y + k_y - 1) \times TILE\_W \times G_{in} + (x + k_x - 1) \times G_{in} + \lfloor c_i / 16 \rfloor$
+
+Esto significa que no hay ninguna ventana que "ensamblar" fisicamente. El MAC recibe un elemento a la vez y lo acumula en su acumulador. Los $3 \times 3 \times C_{in}$ elementos de la ventana llegan de forma secuencial ciclo a ciclo, sin necesidad de un bloque intermedio que los organice.
+
+### Line Buffer
+
+El proposito original del [ Line Buffer ] era guardar 3 filas completas del feature map en BRAM para evitar lecturas recurrentes de memoria al acceder a la vecindad espacial $3 \times 3$ de un pixel. La idea era que, dado que una convolucion $3 \times 3$ necesita las filas $y-1$, $y$ e $y+1$, era mas eficiente tenerlas pre-cargadas en un buffer intermedio antes de pasarlas al [ Window Generator ].
+
+Este bloque tambien se descarto porque el [ IFBuffer ] ya almacena el tile completo de $128 \times 8$ pixeles con todos sus canales. El tile por definicion contiene todas las filas necesarias para procesar cualquier pixel dentro de el, incluyendo su vecindad $3 \times 3$. Dado que el BRAM tiene una latencia de acceso de exactamente 1 ciclo a cualquier direccion, el [ Address Generator ] puede calcular directamente la direccion de cualquier elemento del vecindario y el [ IFBuffer ] lo entrega en el siguiente ciclo sin ninguna penalizacion adicional. El tile cumple exactamente el rol que el [ Line Buffer ] pretendia cumplir, sin requerir un bloque separado ni logica adicional.
+
+---
+
 ## CALCULO DE DIRECCIONES EN EL HARDWARE
 
 Para entender como es que el [ Address Generator ] computa cada direccion, primero hay que entender como estan organizados los datos en la BRAM. Tanto el [ IFBuffer ] como el [ Weight Buffer ] y el [ Output Buffer ] usan palabras de 128 bits ( 16 bytes ), lo que significa que en una sola lectura se obtienen 16 valores INT8 al mismo tiempo. Esto es lo que permite el paralelismo de 16 MACs, ya que en cada ciclo cada MAC recibe su propio dato sin necesidad de hacer lecturas separadas. Con eso claro, las formulas que calcula el bloque son direcciones de palabras, no de bytes.

@@ -14,6 +14,7 @@ entity fsm_cnn_accelerator is
         post_done        : in std_logic;
         layer_done       : in std_logic;
         reg_has_residual : in std_logic;
+        gap_done         : in std_logic;
         
         -- Output signals.
         acc_clear, addr_en, mac_en, mux_sel, acc_bank_enable : out std_logic;
@@ -23,7 +24,7 @@ entity fsm_cnn_accelerator is
 end fsm_cnn_accelerator;
 
 architecture Behavioral of fsm_cnn_accelerator is
-    type state_type is ( IDLE, COMPUTE, LATCH, POST, DONE );
+    type state_type is ( IDLE, COMPUTE, LATCH, POST, FLUSH, DONE );
 
     -- Aux signals.
     signal current_state, next_state : state_type;
@@ -40,16 +41,19 @@ begin
         end if;
     end process;
     
-    process( current_state,
-             mac_valid, 
-             reg_start, 
-             reg_mode, 
-             pixel_done,
-             reg_pool_en, 
-             reg_pool_type, 
-             post_done, 
-             layer_done,
-             reg_has_residual )
+    process( 
+        current_state,
+        mac_valid, 
+        reg_start, 
+        reg_mode, 
+        pixel_done,
+        reg_pool_en, 
+        reg_pool_type, 
+        post_done, 
+        layer_done,
+        reg_has_residual,
+        gap_done 
+    )
     begin
         -- Default values for signals.
         acc_clear       <= '0';
@@ -113,12 +117,22 @@ begin
                 
                 if( post_done = '1' ) then
                     if( layer_done = '1' ) then
-                        next_state <= DONE;
+                        if( reg_pool_en = '1' and reg_pool_type = '1' ) then
+                            next_state <= FLUSH;
+                        else
+                            next_state <= DONE;
+                        end if;
                     else
                         next_state <= COMPUTE;
                     end if;
                 else
                     next_state <= POST;
+                end if;
+            when FLUSH =>
+                if( gap_done = '1' ) then
+                    next_state <= DONE;
+                else
+                    next_state <= FLUSH;
                 end if;
             when DONE =>
                 reg_done <= '1';
