@@ -137,3 +137,68 @@ Si $relu\_en = 0$ entonces se omite este paso y el valor clampedo pasa directo c
 ### Latencia y paralelismo
 
 El bloque procesa los 16 canales en paralelo dentro de un unico proceso sincrono, por lo que la latencia total es de exactamente 1 ciclo de reloj. Un ciclo despues de que $quant\_en = 1$, los 16 valores INT8 estan disponibles en $data\_out$ y la señal $valid\_out = 1$, que es la que usa la FSM como $post\_done$ para saber que puede avanzar al siguiente estado.
+
+---
+
+## BLOQUE [ pool_unit ]
+
+### Estructura modular
+
+El bloque de pooling se decidio implementar de forma modular en tres archivos separados: [ max\_pool ], [ gap\_unit ] y [ pool\_unit ]. Los primeros dos implementan cada operacion por separado, y el tercero es un wrapper que instancia ambos y selecciona la salida correcta mediante multiplexores controlados por la señal $pool\_type\_sel$. Esta decision de diseño se tomo para mantener cada archivo enfocado en una sola responsabilidad, lo que facilita entender, verificar y modificar cada operacion de forma independiente.
+
+### Decision clave: pool y residual nunca coexisten en MobileNetV2
+
+Revisando la tabla de capas de MobileNetV2, se encontro que las capas con residual connection siempre tienen $stride = 1$ ( sin reduccion espacial ), mientras que las capas con pooling siempre tienen $stride = 2$ ( con reduccion espacial ). Esto significa que $reg\_pool\_en = 1$ y $reg\_has\_residual = 1$ nunca ocurren al mismo tiempo, lo que simplifica significativamente el multiplexor antes del [ OFBuffer ]: solo necesita dos entradas controladas por $pool\_act$.
+
+---
+
+## BLOQUE [ max\_pool ]
+
+### Como funciona MaxPool $2 \times 2$
+
+MaxPool $2 \times 2$ con stride $2$ toma una ventana de $2 \times 2$ pixeles y se queda con el maximo de cada canal, reduciendo las dimensiones espaciales a la mitad. Con el orden de traversal del [ Address Generator ] ( $co \rightarrow x \rightarrow y$ ), los pixeles llegan en el orden: todos los co\_groups de $(x=0, y=0)$, luego $(x=1, y=0)$, etc. Para hacer MaxPool $2 \times 2$ entonces se necesitan dos etapas de comparacion:
+
+* **Comparacion horizontal**: comparar pixel en $x$ par con pixel en $x$ impar, canal por canal, para obtener el maximo horizontal $h\_max$.
+* **Comparacion vertical**: comparar $h\_max$ de la fila $y$ par con $h\_max$ de la fila $y$ impar, para obtener el maximo final de la ventana $2 \times 2$.
+
+### Hardware interno del MaxPool
+
+Para implementar estas dos etapas se necesitan tres elementos internos:
+
+* **Banco de registros $x\_even\_reg$**: 4 registros de 128 bits ( uno por co\_group ) donde se guardan los pixeles en posicion $x$ par. Cuando llega el pixel $x$ impar correspondiente, se compara con el registro para obtener $h\_max$. Vivado infiere estos 4 registros como Distributed RAM ( 128 LUTs ).
+
+* **Row buffer (BRAM)**: una BRAM de 256 palabras $\times$ 128 bits que guarda los maximos horizontales de la fila $y$ par. Cuando se procesa la fila $y$ impar, se lee el row buffer para comparar y obtener el maximo final de la ventana. La direccion de acceso al row buffer es $\lfloor x/2 \rfloor \times (max\_co + 1) + co\_counter$. Vivado infiere esto como 2 RAMB36.
+
+* **Pipeline de 2 etapas**: dado que el BRAM tiene 1 ciclo de latencia de lectura, cuando se detecta la condicion $x$ impar, $y$ impar, se registran $h\_max$ y la direccion de salida en un ciclo ( etapa 1 ), y en el ciclo siguiente el dato del row buffer ya esta disponible para hacer la comparacion final y escribir en el [ OFBuffer ] ( etapa 2 ).
+
+### Direccion de escritura al OFBuffer en MaxPool
+
+La salida de MaxPool tiene dimensiones espaciales reducidas a la mitad. La direccion de escritura al [ OFBuffer ] es:
+
+$addr\_out\_pool = \lfloor y/2 \rfloor \times (TILE\_W / 2) \times G_{out} + \lfloor x/2 \rfloor \times G_{out} + co\_counter$
+
+En hardware esto se implementa tomando directamente los bits superiores de los contadores: $y[2:1]$ para $\lfloor y/2 \rfloor$ y $x[6:1]$ para $\lfloor x/2 \rfloor$, sin necesidad de divisiones. Esta direccion la calcula el bloque [ max\_pool ] internamente, sin modificar el [ Address Generator ].
+
+---
+
+## BLOQUE [ gap\_unit ]
+
+### Como funciona Global Average Pool
+
+El Global Average Pool ( GAP ) calcula el promedio de todos los pixeles espaciales para cada canal, produciendo una salida de $1 \times 1 \times C_{out}$. Para MobileNetV2, el GAP se aplica sobre una entrada de $16 \times 16 \times 64$, es decir, se promedian $256$ pixeles por canal.
+
+### Hardware interno del GAP
+
+El bloque mantiene un banco de acumuladores INT32: 4 co\_groups $\times$ 16 canales $\times$ 32 bits $= 2048$ bits en total, implementados como registros ( FFs ). Durante el procesamiento normal ( estado POST de la FSM ), el bloque va acumulando las salidas del [ quant\_relu ] en los acumuladores correspondientes al co\_group activo. Cuando se detecta $layer\_done = 1$, todos los acumuladores tienen la suma completa de todos los pixeles.
+
+Una vez terminada la acumulacion, el bloque entra en fase de escritura: en ciclos consecutivos escribe un co\_group por ciclo al [ OFBuffer ], aplicando el shift aritmetico y clamp antes de escribir. La direccion de escritura es simplemente $co\_write\_cnt$ ( los valores $0, 1, 2, 3$ ), ya que la salida GAP es un tensor de $1 \times 1 \times C_{out}$.
+
+### Calculo del promedio
+
+El promedio en hardware se implementa como un desplazamiento aritmetico a la derecha por $gap\_shift$ bits, que el PS calcula como $\log_2(H \times W)$ antes de lanzar la capa. Para MobileNetV2 con entrada $16 \times 16$: $gap\_shift = \log_2(256) = 8$, lo que equivale a dividir por $256$ simplemente tomando los bits $[15:8]$ del acumulador.
+
+### Cambio en la FSM principal: estado FLUSH
+
+Dado que el GAP solo puede escribir sus resultados despues de procesar todos los pixeles ( cuando $layer\_done = 1$ ), la FSM principal no puede ir directamente a DONE como en los demas casos. Se agrego el estado **FLUSH** a la FSM, al cual se entra cuando $post\_done = 1$, $layer\_done = 1$ y la capa es de tipo GAP ( $reg\_pool\_en = 1$ y $reg\_pool\_type = 1$ ). En FLUSH la FSM espera hasta que $gap\_done = 1$, señal que genera el [ gap\_unit ] cuando termina de escribir todos los co\_groups al [ OFBuffer ]. Despues de eso, la FSM avanza a DONE y genera el IRQ hacia el PS.
+
+Para MobileNetV2 con $C_{out} = 64$ ( 4 co\_groups ), el estado FLUSH dura exactamente 5 ciclos de reloj antes de avanzar a DONE.
