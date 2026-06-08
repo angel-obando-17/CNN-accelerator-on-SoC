@@ -112,7 +112,6 @@ begin
                 sig_y_cnt      <= ( others => '0' );
                 sig_tile_x_cnt <= '0';
                 sig_tile_y_cnt <= ( others => '0' );
-                sig_layer_done <= '0';
             end if;
 
         end if;
