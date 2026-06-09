@@ -14,18 +14,19 @@ entity mac is
 end mac;
 
 architecture Behavioral of mac is
-    signal accumulator : signed( 31 downto 0 );
-
-    attribute use_dsp : string;
-    attribute use_dsp of accumulator : signal is "yes";
+    signal accumulator : signed( 31 downto 0 ) := ( others => '0' );
+    signal product     : signed( 15 downto 0 ) := ( others => '0' );
 begin
+    
+    product <= weight * act;
+    
     process( clk )
     begin
         if( rising_edge( clk ) ) then
             if( reset = '1' or clear = '1' ) then
                 accumulator <= ( others => '0' );
             elsif( enable = '1' ) then
-                accumulator <= accumulator + ( weight * act );
+                accumulator <= accumulator + resize( product, 32 );
             end if;
         end if;
     end process;

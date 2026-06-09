@@ -202,3 +202,89 @@ El promedio en hardware se implementa como un desplazamiento aritmetico a la der
 Dado que el GAP solo puede escribir sus resultados despues de procesar todos los pixeles ( cuando $layer\_done = 1$ ), la FSM principal no puede ir directamente a DONE como en los demas casos. Se agrego el estado **FLUSH** a la FSM, al cual se entra cuando $post\_done = 1$, $layer\_done = 1$ y la capa es de tipo GAP ( $reg\_pool\_en = 1$ y $reg\_pool\_type = 1$ ). En FLUSH la FSM espera hasta que $gap\_done = 1$, señal que genera el [ gap\_unit ] cuando termina de escribir todos los co\_groups al [ OFBuffer ]. Despues de eso, la FSM avanza a DONE y genera el IRQ hacia el PS.
 
 Para MobileNetV2 con $C_{out} = 64$ ( 4 co\_groups ), el estado FLUSH dura exactamente 5 ciclos de reloj antes de avanzar a DONE.
+
+---
+
+## BUGS DE TIMING ENCONTRADOS Y CORREGIDOS EN V1.0
+
+Durante la verificacion en simulacion de la arquitectura V1.0 se encontraron cinco problemas de timing que causaban resultados incorrectos. Todos se manifestaban como valores erroneos en el OFBuffer al finalizar el calculo. A continuacion se documenta cada uno: cual era el problema, por que ocurria y como se corrigio.
+
+### Bug 1 — Los MACs acumulaban el dato del ciclo anterior
+
+**Problema**: los resultados del MAC array eran incorrectos porque cada MAC estaba acumulando los datos de activacion y peso del ciclo previo, no del ciclo actual.
+
+**Por que ocurria**: el [ IFBuffer ] y el [ Weight Buffer ] son BRAMs con 1 ciclo de latencia de lectura. El [ Address Generator ] presenta las direcciones en el ciclo en que `addr_en = 1`, pero el dato no esta disponible hasta el ciclo siguiente. La FSM activaba `mac_en` exactamente 1 ciclo despues de `addr_en`, pensando que el dato ya estaba listo. El problema es que `weight_arr` y `mux_act_out` son señales combinacionales que reflejan el dato del ciclo de BRAM anterior, no el actual.
+
+**Solucion**: se agregaron dos registros de pipeline en `cnn_accelerator.vhd`, `weight_reg` y `act_reg`, que capturan los datos cuando `sig_addr_en = 1`. El MAC array se conecta a estos registros en lugar de a las señales combinacionales directas. De esta manera, cuando `mac_en = 1` en el ciclo siguiente, los registros contienen exactamente el dato que la BRAM entrego en ese ciclo.
+
+### Bug 2 — Escrituras multiples al OFBuffer por cada pixel
+
+**Problema**: se escribia el mismo resultado mas de una vez en la misma direccion del OFBuffer, lo que no era un problema de correccion en este caso (el dato era el mismo), pero en capas con residual o pool podia generar escrituras incorrectas y causaba confusion en simulacion.
+
+**Por que ocurria**: la señal `ofbuf_wr_en` estaba conectada directamente a `quant_valid`. El bloque [ quant\_relu ] mantiene `quant_valid = 1` durante todo el estado POST de la FSM, que dura varios ciclos. Esto generaba multiples flancos de escritura a la misma direccion mientras la FSM permanecia en POST.
+
+**Solucion**: se agrego la señal `quant_valid_prev` que registra el valor anterior de `quant_valid`. La señal de escritura se convirtio en `quant_valid AND (NOT quant_valid_prev)`, lo que genera un pulso de exactamente 1 ciclo en el flanco de subida de `quant_valid`. Solo hay una escritura por resultado.
+
+### Bug 3 — La direccion de escritura al OFBuffer ya habia avanzado
+
+**Problema**: los datos se escribian en la direccion incorrecta del OFBuffer. Los pixeles terminaban en posiciones desplazadas.
+
+**Por que ocurria**: la direccion `ofbuf_wr_addr` estaba conectada directamente a `ag_addr_out`. En el momento en que `quant_valid` se activa (estado POST), el [ Address Generator ] ya calculo las direcciones del siguiente pixel y `ag_addr_out` apunta a una direccion distinta a la del pixel que acaba de terminar de computarse.
+
+**Solucion**: se agrego el registro `ofbuf_wr_addr_reg` que captura `ag_addr_out` cuando `sig_acc_bank_en = 1` (estado LATCH), que es el ciclo exacto en que el pixel termina de acumularse. Esa direccion capturada es la que se usa para la escritura posterior en POST.
+
+### Bug 4 — El contador interno del Address Generator desbordaba
+
+**Problema**: en algunos casos el [ Address Generator ] generaba mas iteraciones de las debidas para un pixel, produciendo accesos fuera de rango en los buffers.
+
+**Por que ocurria**: el contador `sig_inner_cnt` se incrementaba incondicionalmente en cada ciclo del estado ACCUM, sin verificar si ya habia alcanzado `max_inner`. En el caso limite, cuando `sig_inner_cnt = max_inner`, el contador incrementaba una vez mas antes de que la transicion a PIXEL\_END ocurriera, causando que en la ultima iteracion se accediera a una direccion mas alla del final del kernel.
+
+**Solucion**: se agrego una guarda `if sig_inner_cnt < max_inner` alrededor del incremento, de forma que el contador satura al llegar al maximo y no puede desbordarse.
+
+### Bug 5 — pixel\_done no se levantaba en el ciclo de transicion a PIXEL\_END
+
+**Problema**: la señal `pixel_done` del [ Address Generator ] llegaba tarde a la FSM principal, causando que esta procesara un ciclo extra antes de avanzar al siguiente estado.
+
+**Por que ocurria**: `pixel_done` se asignaba en el estado PIXEL\_END, pero la transicion `next_state <= PIXEL_END` y la asignacion de `pixel_done` ocurrian en el mismo ciclo. Como `pixel_done` era una salida combinacional que depende del `current_state`, no estaba activa en el ciclo en que se evaluaba la condicion `sig_inner_cnt = max_inner`, sino en el ciclo siguiente, cuando ya se habia entrado a PIXEL\_END.
+
+**Solucion**: se agrego `pixel_done <= '1'` directamente en el bloque de la condicion `if sig_inner_cnt = max_inner`, antes de asignar `next_state <= PIXEL_END`. Asi la señal se activa en el mismo ciclo que se toma la decision de transicion.
+
+---
+
+## CORRECCIONES EN LA FSM PRINCIPAL ( fsm\_cnn\_acc )
+
+Ademas de los bugs en el datapath, se identificaron tres problemas en las señales de control de la FSM principal que causaban comportamiento incorrecto al inicio de cada capa y en la transicion entre estados.
+
+### mac\_clear faltante en IDLE
+
+En el estado IDLE la FSM levantaba `acc_clear` para limpiar el [ Accumulator Bank ], pero no levantaba `mac_clear`, lo que significa que los acumuladores individuales de los MACs podian conservar valores residuales de una capa anterior. Se agrego `mac_clear <= '1'` tambien en IDLE.
+
+### addr\_en faltante en LATCH
+
+En el estado LATCH la FSM levantaba `acc_bank_enable` y `mac_clear`, pero no activaba `addr_en`. Esto significaba que durante el ciclo de LATCH el [ Address Generator ] no estaba generando la direccion de salida necesaria para que `ofbuf_wr_addr_reg` pudiera capturarla correctamente. Se agrego `addr_en <= '1'` en LATCH para que el address generator produzca la direccion en ese ciclo.
+
+### addr\_en faltante en POST
+
+Durante el estado POST ( ReLU + cuantizacion + add residual ), el [ Address Generator ] necesita tener `addr_en` activo para que las señales de control derivadas de el ( como `ag_addr_out` ) sean validas. Sin esto, las señales de residual y add no apuntaban a las posiciones correctas. Se agrego `addr_en <= '1'` en POST.
+
+---
+
+## MAC ARRAY — PIPELINE DEL DSP48
+
+### Separacion de multiplicacion y acumulacion
+
+En la implementacion original, la operacion del MAC era `accumulator <= accumulator + (weight * act)` dentro de un unico proceso sincrono. Vivado sintetiza esto como un DSP48 con la multiplicacion y la acumulacion en el mismo ciclo de reloj, lo que puede causar problemas de timing a frecuencias altas porque el camino critico incluye tanto el multiplicador como el sumador del acumulador.
+
+Se extrajo el producto como una señal combinacional separada:
+
+```
+product <= weight * act;
+...
+accumulator <= accumulator + resize( product, 32 );
+```
+
+Esto le da al sintetizador mas flexibilidad para inferir el pipeline interno del DSP48 correctamente, separando la etapa de multiplicacion de la etapa de acumulacion.
+
+### Atributo use\_dsp en archivo de constraints
+
+El atributo `use_dsp` que fuerza la inferencia del DSP48 se movio de `mac.vhd` a un archivo de constraints de sintesis separado ( `.xdc` ). Esto mantiene el archivo VHDL limpio de directivas de sintesis especificas de Vivado, que no forman parte del comportamiento del circuito sino de como se implementa en el dispositivo.

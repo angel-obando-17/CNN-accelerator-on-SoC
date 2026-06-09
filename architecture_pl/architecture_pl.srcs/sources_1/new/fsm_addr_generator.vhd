@@ -65,7 +65,9 @@ begin
 
             -- Increase the value of inner_counter.
             if( current_state = ACCUM ) then
-                sig_inner_cnt <= std_logic_vector( unsigned( sig_inner_cnt ) + 1 );
+                if( sig_inner_cnt < max_inner ) then
+                    sig_inner_cnt <= std_logic_vector( unsigned( sig_inner_cnt ) + 1 );
+                end if;
             end if;
             
             if( current_state = PIXEL_END ) then
@@ -144,6 +146,7 @@ begin
                     mac_valid <= '0';
                 end if;
                 if( max_inner = sig_inner_cnt ) then
+                    pixel_done <= '1';
                     next_state <= PIXEL_END;
                 else
                     next_state <= ACCUM;

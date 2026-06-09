@@ -75,7 +75,9 @@ begin
         case current_state is
             when IDLE =>
                 acc_clear  <= '1';
+                mac_clear  <= '1';
                 if( reg_start = '1' ) then
+                    mac_clear  <= '1';
                     next_state <= COMPUTE;
                 else
                     next_state <= IDLE;
@@ -98,11 +100,13 @@ begin
                 end if;
             when LATCH => 
                 acc_bank_enable <= '1';
-                mac_clear <= '1';   
+                mac_clear       <= '1';
+                addr_en         <= '1';   
                 next_state <= POST; 
             when POST =>
                 relu_en  <= '1';
                 quant_en <= '1';
+                addr_en  <= '1';
                 add_en   <= reg_has_residual;
                 addr_res <= reg_has_residual;
                 if( reg_pool_en = '1' ) then

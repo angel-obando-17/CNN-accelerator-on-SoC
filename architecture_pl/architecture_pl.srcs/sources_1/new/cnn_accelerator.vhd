@@ -79,7 +79,8 @@ architecture Behavioral of cnn_accelerator is
     -- WeightBuffer.
     signal wbuf_data_out      : std_logic_vector( 127 downto 0 );
     signal weight_arr         : int8_array( 0 to NUM_MACS - 1 );
-    
+    signal weight_reg : int8_array( 0 to NUM_MACS - 1 ) := ( others => ( others => '0' ) );
+    signal act_reg    : int8_array( 0 to NUM_MACS - 1 ) := ( others => ( others => '0' ) );
     -- MacArray.
     signal mac_acc_out        : int32_array( 0 to NUM_MACS - 1 );
     
@@ -112,6 +113,9 @@ architecture Behavioral of cnn_accelerator is
     signal ofbuf_wr_en        : std_logic;
     signal ofbuf_wr_addr      : std_logic_vector( 11 downto 0 );
     signal ofbuf_data_in      : std_logic_vector( 127 downto 0 );
+    signal ofbuf_wr_addr_reg  : std_logic_vector( 11 downto 0 );
+    signal quant_valid_prev   : std_logic;
+        
 begin
 
     gen_acc_in: for i in 0 to NUM_MACS - 1 generate
@@ -137,10 +141,34 @@ begin
     gen_apack: for i in 0 to NUM_MACS - 1 generate
         add_packed( ( i * 8 ) + 7 downto ( i * 8 ) ) <= std_logic_vector( add_data_out( i ) );
     end generate;
-
-    ofbuf_wr_en   <= pool_wr_en   when sig_pool_act = '1' else quant_valid;
     
-    ofbuf_wr_addr <= pool_wr_addr when sig_pool_act = '1' else ag_addr_out;
+    -- Los datos llegan del buffer 1 ciclo despues de que addr_en los pide (latencia BRAM).
+    -- mac_en se activa 1 ciclo despues de addr_en, asi que los registros alinean la
+    -- llegada del dato con el ciclo en que el MAC lo consume. Sin esto el MAC acumula
+    -- el dato del ciclo anterior. Lo mismo aplica para ofbuf_wr_addr: la direccion se
+    -- captura en LATCH y se usa en POST, cuando ag_addr_out ya avanzo al siguiente pixel.
+    -- quant_valid_prev convierte quant_valid (nivel) en un pulso de 1 ciclo para la
+    -- escritura al OFBuffer y evitar escrituras duplicadas.
+    process( clk )
+    begin
+        if rising_edge( clk ) then
+            if( reset = '1' ) then
+                weight_reg <= ( others => ( others => '0' ) );
+                act_reg    <= ( others => ( others => '0' ) );
+            elsif( sig_addr_en = '1' ) then
+                weight_reg <= weight_arr;
+                act_reg    <= mux_act_out;
+            end if;
+            quant_valid_prev  <= quant_valid;
+            if( sig_acc_bank_en = '1' ) then
+                ofbuf_wr_addr_reg <= ag_addr_out;
+            end if;
+        end if;
+    end process;
+        
+    ofbuf_wr_en   <= pool_wr_en   when sig_pool_act = '1' else ( quant_valid and ( not quant_valid_prev ) );
+    
+    ofbuf_wr_addr <= pool_wr_addr when sig_pool_act = '1' else ofbuf_wr_addr_reg;
     
     ofbuf_data_in <= pool_data_out when sig_pool_act = '1' else
                      add_packed    when sig_add_en   = '1' else
@@ -243,8 +271,8 @@ begin
             reset           => reset,
             enable          => sig_mac_en,
             clear           => sig_mac_clear,
-            weight          => weight_arr,
-            act             => mux_act_out,
+            weight          => weight_reg,
+            act             => act_reg,
             acc_out         => mac_acc_out
         );    
     
