@@ -145,7 +145,9 @@ begin
                 if( sig_inner_cnt = "0000000000" ) then
                     mac_valid <= '0';
                 end if;
-                if( max_inner = sig_inner_cnt ) then
+                if( addr_en = '0' ) then          -- ? agregar esto
+                    next_state <= IDLE;
+                elsif( max_inner = sig_inner_cnt ) then
                     pixel_done <= '1';
                     next_state <= PIXEL_END;
                 else

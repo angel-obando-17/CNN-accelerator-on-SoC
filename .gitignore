@@ -19,6 +19,8 @@
 /architecture_pl/architecture_pl.srcs/sources_1/new/tb_cnn_accelerator.vhd
 /architecture_pl/tb_cnn_accelerator_behav.wcfg
 
+/tb/gen_conv3x3_tb.py
+
 *.pdf
 *.docx
 *.pptx
