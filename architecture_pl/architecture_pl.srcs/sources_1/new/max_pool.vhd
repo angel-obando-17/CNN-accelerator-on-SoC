@@ -25,7 +25,7 @@ architecture Behavioral of max_pool is
     type reg_bank_t is array( 0 to 3 )   of std_logic_vector( 127 downto 0 );
     type row_buf_t  is array( 0 to 255 ) of std_logic_vector( 127 downto 0 );
     
-    signal x_even_reg   : reg_bank_t;
+    signal x_even_reg   : reg_bank_t := ( others => ( others => '0' ) );
     signal row_buf_ram  : row_buf_t;
     signal rb_rd_data   : std_logic_vector( 127 downto 0 );
     signal h_max        : std_logic_vector( 127 downto 0 );

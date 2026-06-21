@@ -79,8 +79,8 @@ architecture Behavioral of cnn_accelerator is
     -- WeightBuffer.
     signal wbuf_data_out      : std_logic_vector( 127 downto 0 );
     signal weight_arr         : int8_array( 0 to NUM_MACS - 1 );
-    signal weight_reg : int8_array( 0 to NUM_MACS - 1 ) := ( others => ( others => '0' ) );
-    signal act_reg    : int8_array( 0 to NUM_MACS - 1 ) := ( others => ( others => '0' ) );
+    signal weight_reg         : int8_array( 0 to NUM_MACS - 1 ) := ( others => ( others => '0' ) );
+    signal act_reg            : int8_array( 0 to NUM_MACS - 1 ) := ( others => ( others => '0' ) );
     -- MacArray.
     signal mac_acc_out        : int32_array( 0 to NUM_MACS - 1 );
     
@@ -166,12 +166,12 @@ begin
         end if;
     end process;
         
-    ofbuf_wr_en   <= pool_wr_en   when sig_pool_act = '1' else ( quant_valid and ( not quant_valid_prev ) );
+    ofbuf_wr_en   <= pool_wr_en   when reg_pool_en = '1' else ( quant_valid and ( not quant_valid_prev ) );
     
-    ofbuf_wr_addr <= pool_wr_addr when sig_pool_act = '1' else ofbuf_wr_addr_reg;
+    ofbuf_wr_addr <= pool_wr_addr when reg_pool_en = '1' else ofbuf_wr_addr_reg;
     
-    ofbuf_data_in <= pool_data_out when sig_pool_act = '1' else
-                     add_packed    when sig_add_en   = '1' else
+    ofbuf_data_in <= pool_data_out when reg_pool_en = '1' else
+                     add_packed    when sig_add_en  = '1' else
                      quant_packed;
 
     main_fsm : entity work.fsm_cnn_accelerator

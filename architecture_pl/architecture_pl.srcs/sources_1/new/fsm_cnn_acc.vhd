@@ -133,6 +133,7 @@ begin
                     next_state <= POST;
                 end if;
             when FLUSH =>
+                pool_type_sel <= '1';
                 if( gap_done = '1' ) then
                     next_state <= DONE;
                 else
