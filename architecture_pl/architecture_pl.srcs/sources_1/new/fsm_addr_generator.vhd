@@ -136,6 +136,7 @@ begin
         case current_state is
             when IDLE =>
                 counter_reset <= '1';
+                mac_valid     <= '0';
                 if( addr_en = '1' ) then
                     next_state <= ACCUM;
                 else
@@ -162,6 +163,7 @@ begin
                 end if;
             when LAYER_CHECK =>
                 pixel_done <= '1';
+                mac_valid  <= '0';
                 if( sig_layer_done = '1' ) then
                     next_state <= IDLE;
                 else
