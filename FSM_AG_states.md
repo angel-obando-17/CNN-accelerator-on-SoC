@@ -14,7 +14,7 @@ Estado inicial y de reposo entre pixels. Los contadores se reinician aqui ( cuan
 
 **Señales generadas:**
 - `counter_reset = 1` — señal de salida que indica que los contadores estan en reset
-- `mac_valid = 1` ( valor por defecto del proceso )
+- `mac_valid = 0` — explicitamente cero para evitar que el MAC acumule datos rancios de la capa anterior en el ciclo de transicion IDLE → COMPUTE. Sin este override, el default `mac_valid = 1` causaba una acumulacion fantasma con los registros `act_reg` / `weight_reg` de la capa anterior.
 
 **Señales de entrada evaluadas:**
 - `addr_en` — viene de la FSM principal
@@ -74,6 +74,7 @@ El orden de los contadores es: primero todos los co_groups del pixel, luego los 
 
 **Señales generadas:**
 - `pixel_done = 1` — se mantiene activa un ciclo mas
+- `mac_valid = 0` — explicitamente cero para evitar que el MAC acumule datos del pixel anterior en el ciclo de transicion POST → COMPUTE. En ese flanco la FSM principal ya paso a COMPUTE ( `mac_en = mac_valid` ) pero el AG todavia esta en LAYER_CHECK, y sin este override el default `mac_valid = 1` causaria una acumulacion fantasma con los datos del pixel recien terminado.
 
 **Señales de entrada evaluadas:**
 - `sig_layer_done` — calculado en el ciclo anterior ( PIXEL_END )

@@ -285,6 +285,50 @@ accumulator <= accumulator + resize( product, 32 );
 
 Esto le da al sintetizador mas flexibilidad para inferir el pipeline interno del DSP48 correctamente, separando la etapa de multiplicacion de la etapa de acumulacion.
 
+---
+
+## BUG 6 — mac_valid fantasma en transiciones de estado del AG ( corregido 2026-06-25 )
+
+### Problema
+
+El primer pixel de cualquier capa producía un resultado incorrecto en el OFBuffer mientras que los pixeles siguientes salían bien. En el test multilayer, con Capa 3 PW1x1 all-nines y residual all-ones, `OFBuffer[0]` guardaba `0x0B` en lugar de `0x0A`.
+
+### Por que ocurria
+
+El proceso combinacional de `fsm_addr_generator.vhd` define `mac_valid <= '1'` como default. Esto aplica a todos los estados que no tienen un override explícito: IDLE, PIXEL_END y LAYER_CHECK.
+
+Se identificaron dos escenarios donde este default causaba una acumulacion fantasma:
+
+**Escenario 1 — Inicio de capa (IDLE → COMPUTE):**
+
+Cuando la FSM principal transiciona IDLE→COMPUTE (flanco de `reg_start`), el `fsm_addr_generator` tarda exactamente 1 ciclo extra en seguirla, porque lee `addr_en = 0` (salida de IDLE) en el mismo flanco de transición y permanece en IDLE hasta el ciclo siguiente. Sin embargo, entre ese primer flanco y el siguiente, la FSM principal ya está en COMPUTE con `mac_en = mac_valid`. Como el AG sigue en IDLE y el default es `mac_valid = '1'`, el MAC acumula una vez con los registros `weight_reg` y `act_reg` rancios de la capa anterior.
+
+En el test concreto: la capa anterior era DW3x3 con `act_reg = 0x10 = 16` y `weight_reg = 0x01`. Producto fantasma = 16. Acumulación total = 16 + 144 = 160. Cuantización: `160 >> 4 = 10 = 0x0A`. Con residual 0x01: `0x0B`. ✗
+
+**Escenario 2 — Frontera de pixel (POST → COMPUTE entre pixeles):**
+
+Al terminar cada pixel, la FSM principal va POST→COMPUTE mientras el AG va LAYER_CHECK→ACCUM. En el primer flanco de COMPUTE, el AG está todavía en LAYER_CHECK con `mac_valid = '1'` por default, causando otra acumulación fantasma. En el test actual el producto fantasma era 9 (datos ya correctos), el total quedaba `9 + 144 = 153`, y `153 >> 4 = 9`, que coincidía con el resultado esperado. El bug existía pero su efecto era invisible.
+
+### Solucion
+
+Se agregaron dos overrides explícitos en `fsm_addr_generator.vhd`:
+
+```vhdl
+when IDLE =>
+    counter_reset <= '1';
+    mac_valid     <= '0';   -- evita fantasma en transicion IDLE → COMPUTE
+    ...
+
+when LAYER_CHECK =>
+    pixel_done <= '1';
+    mac_valid  <= '0';   -- evita fantasma en transicion POST → COMPUTE
+    ...
+```
+
+Con esto `mac_valid = '1'` solo cuando el AG está en ACCUM con `sig_inner_cnt > 0`, que es el único momento en que el dato del buffer es válido y debe acumularse.
+
+---
+
 ### Atributo use\_dsp en archivo de constraints
 
 El atributo `use_dsp` que fuerza la inferencia del DSP48 se movio de `mac.vhd` a un archivo de constraints de sintesis separado ( `.xdc` ). Esto mantiene el archivo VHDL limpio de directivas de sintesis especificas de Vivado, que no forman parte del comportamiento del circuito sino de como se implementa en el dispositivo.
