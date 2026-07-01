@@ -13,10 +13,12 @@ entity fsm_addr_generator is
         max_y          : in std_logic_vector( 2 downto 0 );
         max_tile_x     : in std_logic;
         max_tile_y     : in std_logic_vector( 4 downto 0 );
+        tile_ready     : in std_logic;
         -- Output signals.
         counter_reset  : out std_logic;
         pixel_done     : out std_logic;
         layer_done     : out std_logic;
+        tile_boundary  : out std_logic;
         inner_counter  : out std_logic_vector( 9 downto 0 );
         co_counter     : out std_logic_vector( 1 downto 0 );
         x_counter      : out std_logic_vector( 6 downto 0 );
@@ -28,20 +30,22 @@ entity fsm_addr_generator is
 end fsm_addr_generator;
 
 architecture Behavioral of fsm_addr_generator is
-    type state_type is ( IDLE, ACCUM, PIXEL_END, LAYER_CHECK );
+    type state_type is ( IDLE, ACCUM, PIXEL_END, LAYER_CHECK, TILE_HOLD );
 
     -- Aux signals.
     signal current_state, next_state : state_type;
-    signal sig_layer_done : std_logic;
-    signal sig_inner_cnt  : std_logic_vector( 9 downto 0 ) := ( others => '0' );
-    signal sig_co_cnt     : std_logic_vector( 1 downto 0 ) := ( others => '0' );
-    signal sig_x_cnt      : std_logic_vector( 6 downto 0 ) := ( others => '0' );
-    signal sig_y_cnt      : std_logic_vector( 2 downto 0 ) := ( others => '0' );
-    signal sig_tile_x_cnt : std_logic := '0';
-    signal sig_tile_y_cnt : std_logic_vector( 4 downto 0 ) := ( others => '0' );
+    signal sig_layer_done    : std_logic;
+    signal sig_tile_boundary : std_logic;
+    signal sig_inner_cnt     : std_logic_vector( 9 downto 0 ) := ( others => '0' );
+    signal sig_co_cnt        : std_logic_vector( 1 downto 0 ) := ( others => '0' );
+    signal sig_x_cnt         : std_logic_vector( 6 downto 0 ) := ( others => '0' );
+    signal sig_y_cnt         : std_logic_vector( 2 downto 0 ) := ( others => '0' );
+    signal sig_tile_x_cnt    : std_logic := '0';
+    signal sig_tile_y_cnt    : std_logic_vector( 4 downto 0 ) := ( others => '0' );
 begin
 
     layer_done     <= sig_layer_done;
+    tile_boundary  <= sig_tile_boundary;
     inner_counter  <= sig_inner_cnt;
     co_counter     <= sig_co_cnt;
     x_counter      <= sig_x_cnt;
@@ -53,13 +57,14 @@ begin
     begin
         if( reset = '1' ) then
             current_state  <= IDLE;
-            sig_inner_cnt  <= ( others => '0' );
-            sig_co_cnt     <= ( others => '0' );
-            sig_x_cnt      <= ( others => '0' );
-            sig_y_cnt      <= ( others => '0' );
-            sig_tile_x_cnt <= '0';
-            sig_tile_y_cnt <= ( others => '0' );
-            sig_layer_done <= '0';
+            sig_inner_cnt     <= ( others => '0' );
+            sig_co_cnt        <= ( others => '0' );
+            sig_x_cnt         <= ( others => '0' );
+            sig_y_cnt         <= ( others => '0' );
+            sig_tile_x_cnt    <= '0';
+            sig_tile_y_cnt    <= ( others => '0' );
+            sig_layer_done    <= '0';
+            sig_tile_boundary <= '0';
         elsif( rising_edge( clk ) ) then
             current_state <= next_state;
 
@@ -77,6 +82,12 @@ begin
                     sig_y_cnt      = max_y      and
                     sig_tile_x_cnt = max_tile_x and
                     sig_tile_y_cnt = max_tile_y
+                ) else '0';
+                
+                sig_tile_boundary <= '1' when(
+                sig_co_cnt = max_co and
+                sig_x_cnt  = max_x  and
+                sig_y_cnt  = max_y
                 ) else '0';
             end if;
             
@@ -124,7 +135,9 @@ begin
         addr_en,
         max_inner,
         sig_layer_done,
-        sig_inner_cnt
+        sig_inner_cnt,
+        sig_tile_boundary,
+        tile_ready
     )
 
     begin
@@ -166,9 +179,20 @@ begin
                 mac_valid  <= '0';
                 if( sig_layer_done = '1' ) then
                     next_state <= IDLE;
+                elsif( sig_tile_boundary = '1' ) then
+                    next_state <= TILE_HOLD;
                 else
                     next_state <= ACCUM;
                 end if;
+            when TILE_HOLD =>
+                pixel_done <= '1';
+                mac_valid  <= '0';
+                if( tile_ready = '1' ) then
+                    next_state <= ACCUM;
+                else
+                    next_state <= TILE_HOLD;
+                end if;
         end case;
+        
     end process;
 end Behavioral;

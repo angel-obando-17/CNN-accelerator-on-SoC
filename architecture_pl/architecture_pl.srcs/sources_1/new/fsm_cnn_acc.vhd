@@ -13,18 +13,32 @@ entity fsm_cnn_accelerator is
         reg_pool_type    : in std_logic;
         post_done        : in std_logic;
         layer_done       : in std_logic;
+        tile_boundary    : in std_logic;
+        tile_ready       : in std_logic;
         reg_has_residual : in std_logic;
         gap_done         : in std_logic;
         
         -- Output signals.
-        acc_clear, addr_en, mac_en, mux_sel, acc_bank_enable : out std_logic;
-        mac_clear, relu_en, quant_en, pool_act, pool_type_sel : out std_logic;
-        add_en, addr_res, reg_done, irq_out: out std_logic
+        acc_clear       : out std_logic;
+        addr_en         : out std_logic;
+        mac_en          : out std_logic;
+        mux_sel         : out std_logic;
+        acc_bank_enable : out std_logic;
+        mac_clear       : out std_logic;
+        relu_en         : out std_logic;
+        quant_en        : out std_logic;
+        pool_act        : out std_logic; 
+        pool_type_sel   : out std_logic;
+        add_en          : out std_logic; 
+        addr_res        : out std_logic;
+        tile_req        : out std_logic; 
+        reg_done        : out std_logic;
+        irq_out         : out std_logic
     );
 end fsm_cnn_accelerator;
 
 architecture Behavioral of fsm_cnn_accelerator is
-    type state_type is ( IDLE, COMPUTE, LATCH, POST, FLUSH, DONE );
+    type state_type is ( IDLE, COMPUTE, LATCH, POST, TILE_WAIT, FLUSH, DONE );
 
     -- Aux signals.
     signal current_state, next_state : state_type;
@@ -51,6 +65,8 @@ begin
         reg_pool_type, 
         post_done, 
         layer_done,
+        tile_boundary,
+        tile_ready,
         reg_has_residual,
         gap_done 
     )
@@ -68,6 +84,7 @@ begin
         pool_type_sel   <= '0';
         add_en          <= '0';
         addr_res        <= '0';
+        tile_req        <= '0';
         reg_done        <= '0';
         irq_out         <= '0';
         next_state      <= current_state;
@@ -126,12 +143,22 @@ begin
                         else
                             next_state <= DONE;
                         end if;
+                    elsif( tile_boundary = '1' ) then
+                        next_state <= TILE_WAIT;
                     else
                         next_state <= COMPUTE;
                     end if;
                 else
                     next_state <= POST;
                 end if;
+            when TILE_WAIT =>
+                tile_req <= '1';
+                addr_en  <= '1';
+                if( tile_ready = '1' ) then
+                    next_state <= COMPUTE;
+                else
+                    next_state <= TILE_WAIT;
+                end if; 
             when FLUSH =>
                 pool_type_sel <= '1';
                 if( gap_done = '1' ) then

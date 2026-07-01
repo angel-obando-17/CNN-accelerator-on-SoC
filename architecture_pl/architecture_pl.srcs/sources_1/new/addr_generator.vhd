@@ -7,6 +7,7 @@ entity addr_generator is
         clk, reset     : in  std_logic;
         -- Input signals.
         cin            : in  std_logic_vector( 6 downto 0 );
+        tile_ready     : in std_logic;
         ---- From accelerator FSM.
         addr_en        : in  std_logic;
         reg_mode       : in  std_logic_vector( 1 downto 0 );
@@ -23,6 +24,7 @@ entity addr_generator is
         addr_w         : out std_logic_vector( 11 downto 0 );
         addr_out       : out std_logic_vector( 11 downto 0 );
         byte_sel       : out std_logic_vector( 3 downto 0 );
+        tile_boundary  : out std_logic;
         ---- To accelerator FSM.
         pixel_done     : out std_logic;
         layer_done     : out std_logic;
@@ -47,6 +49,7 @@ architecture Behavioral of addr_generator is
     signal sig_pixel_done    : std_logic;
     signal sig_layer_done    : std_logic;
     signal sig_counter_reset : std_logic;
+    signal sig_tile_boundary : std_logic;
     ---- Inner sub-counters.
     signal sig_ci : unsigned( 6 downto 0 ) := ( others => '0' );
     signal sig_ky : unsigned( 1 downto 0 ) := ( others => '0' );
@@ -66,9 +69,11 @@ begin
             max_y          => max_y,
             max_tile_x     => max_tile_x,
             max_tile_y     => max_tile_y,
+            tile_ready     => tile_ready,
             counter_reset  => sig_counter_reset,
             pixel_done     => sig_pixel_done,
             layer_done     => sig_layer_done,
+            tile_boundary  => sig_tile_boundary,
             inner_counter  => open,
             co_counter     => co_counter,
             x_counter      => x_counter,
@@ -81,7 +86,8 @@ begin
     pixel_done <= sig_pixel_done;
     layer_done <= sig_layer_done;
     mac_valid  <= sig_mac_valid;
-
+    tile_boundary <= sig_tile_boundary;
+    
     ci_out <= std_logic_vector( sig_ci );
     ky_out <= std_logic_vector( sig_ky );
     kx_out <= std_logic_vector( sig_kx );

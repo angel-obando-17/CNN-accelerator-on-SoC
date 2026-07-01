@@ -23,6 +23,7 @@ entity cnn_accelerator is
         shift              : in std_logic_vector( 4 downto 0 ); -- To quant_relu
         relu6_val          : in std_logic_vector( 7 downto 0 ); -- To quant_relu
         gap_shift          : in std_logic_vector( 4 downto 0 ); -- To gap_unit
+         tile_ready        : in std_logic;
         -- DMA - IFBuffer.
         buf_sel            : in std_logic;
         dma_if_wr_en       : in std_logic;
@@ -41,6 +42,7 @@ entity cnn_accelerator is
         dma_ob_rd_addr     : in std_logic_vector( 11 downto 0 );
         dma_ob_rd_data     : out std_logic_vector( 127 downto 0 );
         -- Outputs.
+        tile_req           : out std_logic;
         reg_done           : out std_logic;
         irq_out            : out std_logic
     );
@@ -68,6 +70,7 @@ architecture Behavioral of cnn_accelerator is
     signal ag_byte_sel        : std_logic_vector( 3 downto 0 );
     signal ag_pixel_done      : std_logic;
     signal ag_layer_done      : std_logic;
+    signal ag_tile_boundary   : std_logic;
     signal ag_co_counter      : std_logic_vector( 1 downto 0 );
     signal ag_x_counter       : std_logic_vector( 6 downto 0 );
     signal ag_y_counter       : std_logic_vector( 2 downto 0 );
@@ -186,6 +189,7 @@ begin
             reg_pool_type    => reg_pool_type,
             post_done        => quant_valid,
             layer_done       => ag_layer_done,
+            tile_boundary    => ag_tile_boundary,
             reg_has_residual => reg_has_residual,
             gap_done         => pool_gap_done,
             acc_clear        => sig_acc_clear,
@@ -199,7 +203,9 @@ begin
             pool_act         => sig_pool_act,
             pool_type_sel    => sig_pool_type_sel,
             add_en           => sig_add_en,
+            tile_ready       => tile_ready,
             addr_res         => sig_addr_res,
+            tile_req         => tile_req,
             reg_done         => reg_done,
             irq_out          => irq_out
         );
@@ -224,6 +230,8 @@ begin
             byte_sel        => ag_byte_sel,
             pixel_done      => ag_pixel_done,
             layer_done      => ag_layer_done,
+            tile_ready      => tile_ready,
+            tile_boundary   => ag_tile_boundary,
             co_counter      => ag_co_counter,
             x_counter       => ag_x_counter,
             y_counter       => ag_y_counter,
