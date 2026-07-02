@@ -4,7 +4,6 @@
 *.o
 
 /.vscode
-/dma
 /CNN/PlantVillage
 /CNN/PlantVillage_segmentado
 /CNN/resultados_experimentos/segmentacion/pares

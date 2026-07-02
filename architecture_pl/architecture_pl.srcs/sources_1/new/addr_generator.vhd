@@ -7,7 +7,7 @@ entity addr_generator is
         clk, reset     : in  std_logic;
         -- Input signals.
         cin            : in  std_logic_vector( 6 downto 0 );
-        tile_ready     : in std_logic;
+        tile_ready     : in  std_logic;
         ---- From accelerator FSM.
         addr_en        : in  std_logic;
         reg_mode       : in  std_logic_vector( 1 downto 0 );
