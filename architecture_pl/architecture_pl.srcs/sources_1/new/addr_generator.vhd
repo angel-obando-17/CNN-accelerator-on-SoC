@@ -180,14 +180,17 @@ begin
     -- To addr_out.
     variable term8  : unsigned( 11 downto 0 );  -- y * TILE_W * num_co.
     variable term9  : unsigned( 9  downto 0 );  -- x * num_co.
+    -- To Padding.
+    variable tile_w_pad : unsigned( 7 downto 0 );
        
     begin
-        tile_w := resize( unsigned( max_x ), 8 ) + 1;
-        num_co := resize( unsigned( max_co ), 3 ) + 1;
+        tile_w     := resize( unsigned( max_x ), 8 ) + 1;
+        tile_w_pad := tile_w + 2;
+        num_co     := resize( unsigned( max_co ), 3 ) + 1;
         
         -- addr_in
-        row        := resize( unsigned( y_counter ), 4 ) + resize( sig_ky, 4 ) - 1;
-        col        := resize( unsigned( x_counter ), 8 ) + resize( sig_kx, 8 ) - 1;
+        row        := resize( unsigned( y_counter ), 4 ) + resize( sig_ky, 4 );
+        col        := resize( unsigned( x_counter ), 8 ) + resize( sig_kx, 8 );
         cin_groups := resize( unsigned( cin( 6 downto 4 ) ), 3 );  -- Cin / 16
                 
         -- addr_w
@@ -200,13 +203,13 @@ begin
         case reg_mode is
             when "01" =>
                 -- DW3x3: word = base_pixel + co_counter (cada grupo de 16 canales)
-                term1 := resize( row * tile_w * cin_groups, 13 );
+                term1 := resize( row * tile_w_pad * cin_groups, 13 );
                 term2 := resize( col * cin_groups, 13 );
                 addr_in  <= std_logic_vector( term1 + term2 + resize( unsigned( co_counter ), 13 ) );
                 byte_sel <= ( others => '0' );
             when others =>
                 -- Conv3x3 y PW1x1: word = base_pixel + sig_ci/16, byte = sig_ci mod 16
-                term1 := resize( row * tile_w * cin_groups, 13 );
+                term1 := resize( row * tile_w_pad * cin_groups, 13 );
                 term2 := resize( col * cin_groups, 13 );
                 addr_in  <= std_logic_vector( term1 + term2 + resize( unsigned( sig_ci( 6 downto 4 ) ), 13 ) );
                 byte_sel <= std_logic_vector( sig_ci( 3 downto 0 ) );

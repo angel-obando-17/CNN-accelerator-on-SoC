@@ -7,25 +7,25 @@ entity reg_bank is
         dma_clk      : in  std_logic;
         dma_reset    : in  std_logic;
         -- AW Channel - Write Address( Master -> Slave ).
-        dma_aw_addr  : in  std_logic_vector( 6 downto 0 );
+        dma_aw_addr  : in  std_logic_vector(  6 downto 0 );
         dma_aw_valid : in  std_logic;
         dma_aw_ready : out std_logic;
         -- W Channel - Write Data ( Master -> Slave ).
         dma_w_data   : in  std_logic_vector( 31 downto 0 );
-        dma_w_strb   : in  std_logic_vector( 3 downto 0 );
+        dma_w_strb   : in  std_logic_vector(  3 downto 0 );
         dma_w_valid  : in  std_logic;
         dma_w_ready  : out std_logic;
         -- B Channel - Write Response ( Slave -> Master ).
-        dma_b_resp   : out std_logic_vector( 1 downto 0 );
+        dma_b_resp   : out std_logic_vector(  1 downto 0 );
         dma_b_valid  : out std_logic;
         dma_b_ready  : in  std_logic;
         -- AR Channel - Read Address ( Master -> Slave ).
-        dma_ar_addr  : in  std_logic_vector( 6 downto 0 );
+        dma_ar_addr  : in  std_logic_vector(  6 downto 0 );
         dma_ar_valid : in  std_logic;
         dma_ar_ready : out std_logic;
         -- R Channel - Read Data ( Slave -> Master ).
         dma_r_data   : out std_logic_vector( 31 downto 0 );
-        dma_r_resp   : out std_logic_vector( 1 downto 0 );
+        dma_r_resp   : out std_logic_vector(  1 downto 0 );
         dma_r_valid  : out std_logic;
         dma_r_ready  : in  std_logic;
         

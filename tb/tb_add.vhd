@@ -9,8 +9,9 @@ use ieee.numeric_std.all;
 -- Add unit: sat8(0x10 + 0x01) = sat8(17) = 17 = 0x11. Sin saturacion (17 < 127).
 -- OFBuffer[0..3] esperado: 0x11...11.
 --
--- Direcciones IFBuffer (addr_in = (y-1 mod 16)*2 + (x-1 mod 256), cin_groups=1):
---   pixel(0,0)=285  pixel(0,1)=30  pixel(1,0)=255  pixel(1,1)=0
+-- Direcciones IFBuffer (addr_in = (y+0)*tile_w_pad + (x+0), tile_w_pad=TILE_W+2=4,
+-- cin_groups=1; PW1x1 mantiene ky=kx=0 fijo, sin padding real):
+--   pixel(0,0)=0  pixel(0,1)=1  pixel(1,0)=4  pixel(1,1)=5
 -- Direcciones WeightBuffer: [0, 15] (co=0, ci=0..15)
 -- Direcciones ResidualBuffer: [0, 3] (addr_out = y*tile_w*num_co + x*num_co + co = 2y+x)
 
@@ -44,7 +45,7 @@ architecture Behavioral of tb_add is
 
     signal buf_sel          : std_logic := '0';
     signal dma_if_wr_en     : std_logic := '0';
-    signal dma_if_wr_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
+    signal dma_if_wr_addr   : std_logic_vector( 12 downto 0 ) := ( others => '0' );
     signal dma_if_wr_data   : std_logic_vector( 127 downto 0 ) := ( others => '0' );
 
     signal dma_wb_wr_en     : std_logic := '0';
@@ -58,6 +59,9 @@ architecture Behavioral of tb_add is
     signal dma_ob_rd_en     : std_logic := '0';
     signal dma_ob_rd_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
     signal dma_ob_rd_data   : std_logic_vector( 127 downto 0 );
+
+    signal tile_ready : std_logic := '0';
+    signal tile_req   : std_logic;
 
     signal reg_done : std_logic;
     signal irq_out  : std_logic;
@@ -98,6 +102,8 @@ begin
             dma_ob_rd_en     => dma_ob_rd_en,
             dma_ob_rd_addr   => dma_ob_rd_addr,
             dma_ob_rd_data   => dma_ob_rd_data,
+            tile_ready       => tile_ready,
+            tile_req         => tile_req,
             reg_done         => reg_done,
             irq_out          => irq_out
         );
@@ -129,19 +135,19 @@ begin
         wait until rising_edge( clk );
 
         -- Cargar IFBuffer banco A (buf_sel='1'): 4 direcciones, todas 0x01.
-        -- addr_in PW1x1 = (y-1 mod 16)*tile_w + (x-1 mod 256), tile_w=2, cin_groups=1.
+        -- addr_in PW1x1 = y*tile_w_pad + x, tile_w_pad=4, cin_groups=1.
         buf_sel        <= '1';
         dma_if_wr_en   <= '1';
         dma_if_wr_data <= ALL_ONES_128;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 285, 12 ) ); -- pixel(0,0): row=15, col=255
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) ); -- pixel(0,0)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 30,  12 ) ); -- pixel(0,1): row=15, col=0
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) ); -- pixel(0,1)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 255, 12 ) ); -- pixel(1,0): row=0,  col=255
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) ); -- pixel(1,0)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0,   12 ) ); -- pixel(1,1): row=0,  col=0
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) ); -- pixel(1,1)
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';

@@ -9,15 +9,16 @@ use ieee.numeric_std.all;
 --   MaxPool 2x2 de tile 4x4 -> salida 2x2. Todos los valores iguales.
 --   OFBuffer[0..3] esperado: 0x10...10.
 --
---   Direcciones IFBuffer (addr_in = (y-1 mod 16)*4 + (x-1 mod 256), cin_groups=1):
---     0, 1, 2, 4, 5, 6, 8, 9, 10, 60, 61, 62, 255, 259, 263, 315
+--   Direcciones IFBuffer (addr_in = y*tile_w_pad + x, tile_w_pad=TILE_W+2=6, cin_groups=1;
+--   PW1x1 mantiene ky=kx=0 fijo, sin padding real):
+--     y=0: 0,1,2,3  y=1: 6,7,8,9  y=2: 12,13,14,15  y=3: 18,19,20,21
 --   Direcciones WeightBuffer: [0, 15] (co=0, ci=0..15)
 --
 -- TEST 2 - GAP | tile 2x2 all-ones, gap_shift=2
 --   Cada pixel: 0x10. 4 pixeles por canal: 4*16=64. gap_shift=2: 64>>2=16=0x10.
 --   OFBuffer[0] esperado: 0x10...10.
 --
---   Direcciones IFBuffer (tile_w=2, cin_groups=1): 285, 30, 255, 0
+--   Direcciones IFBuffer (tile_w_pad=4, cin_groups=1): 0, 1, 4, 5
 --   Direcciones WeightBuffer: [0, 15]
 
 entity tb_pool is
@@ -50,7 +51,7 @@ architecture Behavioral of tb_pool is
 
     signal buf_sel          : std_logic := '0';
     signal dma_if_wr_en     : std_logic := '0';
-    signal dma_if_wr_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
+    signal dma_if_wr_addr   : std_logic_vector( 12 downto 0 ) := ( others => '0' );
     signal dma_if_wr_data   : std_logic_vector( 127 downto 0 ) := ( others => '0' );
 
     signal dma_wb_wr_en     : std_logic := '0';
@@ -64,6 +65,9 @@ architecture Behavioral of tb_pool is
     signal dma_ob_rd_en     : std_logic := '0';
     signal dma_ob_rd_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
     signal dma_ob_rd_data   : std_logic_vector( 127 downto 0 );
+
+    signal tile_ready : std_logic := '0';
+    signal tile_req   : std_logic;
 
     signal reg_done : std_logic;
     signal irq_out  : std_logic;
@@ -104,6 +108,8 @@ begin
             dma_ob_rd_en     => dma_ob_rd_en,
             dma_ob_rd_addr   => dma_ob_rd_addr,
             dma_ob_rd_data   => dma_ob_rd_data,
+            tile_ready       => tile_ready,
+            tile_req         => tile_req,
             reg_done         => reg_done,
             irq_out          => irq_out
         );
@@ -138,47 +144,35 @@ begin
         wait until rising_edge( clk );
 
         -- Cargar IFBuffer banco A (buf_sel='1'): 16 direcciones, todas 0x01.
-        -- addr_in = (y-1 mod 16)*tile_w + (x-1 mod 256), tile_w=4, cin_groups=1.
+        -- addr_in = y*tile_w_pad + x, tile_w_pad=6 (TILE_W=4+2), cin_groups=1.
         buf_sel        <= '1';
         dma_if_wr_en   <= '1';
         dma_if_wr_data <= ALL_ONES_128;
         wait until rising_edge( clk );
 
-        -- Pixeles fila y=1 col=0,1,2 (row=0 en IFBuffer): addr 0, 1, 2.
-        for addr in 0 to 2 loop
-            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 12 ) );
+        -- Fila y=0: addr 0, 1, 2, 3.
+        for addr in 0 to 3 loop
+            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 13 ) );
             wait until rising_edge( clk );
         end loop;
 
-        -- Pixeles fila y=2 col=0,1,2 (row=1 en IFBuffer): addr 4, 5, 6.
-        for addr in 4 to 6 loop
-            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 12 ) );
+        -- Fila y=1: addr 6, 7, 8, 9.
+        for addr in 6 to 9 loop
+            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 13 ) );
             wait until rising_edge( clk );
         end loop;
 
-        -- Pixeles fila y=3 col=0,1,2 (row=2 en IFBuffer): addr 8, 9, 10.
-        for addr in 8 to 10 loop
-            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 12 ) );
+        -- Fila y=2: addr 12, 13, 14, 15.
+        for addr in 12 to 15 loop
+            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 13 ) );
             wait until rising_edge( clk );
         end loop;
 
-        -- Pixeles fila y=0 col=0,1,2 (row=15 en IFBuffer, y-1 wrapping): addr 60, 61, 62.
-        for addr in 60 to 62 loop
-            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 12 ) );
+        -- Fila y=3: addr 18, 19, 20, 21.
+        for addr in 18 to 21 loop
+            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 13 ) );
             wait until rising_edge( clk );
         end loop;
-
-        -- Columna x=0 (col=255 en IFBuffer, x-1 wrapping): filas y=1,2,3.
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 255, 12 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 259, 12 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 263, 12 ) );
-        wait until rising_edge( clk );
-
-        -- Esquina (y=0, x=0): row=15, col=255.
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 315, 12 ) );
-        wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';
         wait until rising_edge( clk );
@@ -242,23 +236,20 @@ begin
         -- ===================================================================
         report "=== INICIO TEST 2: GAP, PW1x1 2x2 all-ones ===";
 
-        -- Cargar IFBuffer banco A: direcciones para tile 2x2 (tile_w=2, cin_groups=1).
-        -- pixel(0,0): row=15, col=255 -> addr=285
-        -- pixel(0,1): row=15, col=0   -> addr=30
-        -- pixel(1,0): row=0,  col=255 -> addr=255
-        -- pixel(1,1): row=0,  col=0   -> addr=0
+        -- Cargar IFBuffer banco A: direcciones para tile 2x2 (tile_w_pad=4, cin_groups=1).
+        -- pixel(0,0)=0  pixel(0,1)=1  pixel(1,0)=4  pixel(1,1)=5
         buf_sel        <= '1';
         dma_if_wr_en   <= '1';
         dma_if_wr_data <= ALL_ONES_128;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 285, 12 ) );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) );
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 30,  12 ) );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) );
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 255, 12 ) );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) );
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0,   12 ) );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) );
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';

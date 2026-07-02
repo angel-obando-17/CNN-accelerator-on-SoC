@@ -7,9 +7,10 @@ use ieee.numeric_std.all;
 -- Todas las activaciones y pesos = 0x01.
 -- Cada MAC acumula 16*9=144 productos de (1*1)=144. Con shift=4: 144 >> 4 = 9 = 0x09.
 --
--- Direcciones IFBuffer ( 14 palabras unicas ):
---   addr: 0, 1, 2, 3, 4, 5, 6, 30, 31, 32, 255, 257, 259, 285
---   Incluyen los bordes con wrapping circular ( y - 1 y x - 1  cuando el pixel es ( 0, 0 ) )
+-- Direcciones IFBuffer ( 16 palabras, addr 0 a 15 ):
+--   Con padding explicito ( row_buf=y+ky, col_buf=x+kx, tile_w_pad=TILE_W+2=4 ),
+--   un tile 2x2 con kernel 3x3 cubre exactamente toda la region con padding 4x4
+--   ( row_buf y col_buf recorren 0..3 cada uno ), addr = row_buf*4 + col_buf.
 --
 -- Direcciones WeightBuffer: [ 0, 143 ] (co*Cin*9 + ci*9 + ky*3 + kx)
 --
@@ -45,7 +46,7 @@ architecture Behavioral of tb_conv3x3 is
 
     signal buf_sel          : std_logic := '0';
     signal dma_if_wr_en     : std_logic := '0';
-    signal dma_if_wr_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
+    signal dma_if_wr_addr   : std_logic_vector( 12 downto 0 ) := ( others => '0' );
     signal dma_if_wr_data   : std_logic_vector( 127 downto 0 ) := ( others => '0' );
 
     signal dma_wb_wr_en     : std_logic := '0';
@@ -59,6 +60,9 @@ architecture Behavioral of tb_conv3x3 is
     signal dma_ob_rd_en     : std_logic := '0';
     signal dma_ob_rd_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
     signal dma_ob_rd_data   : std_logic_vector( 127 downto 0 );
+
+    signal tile_ready : std_logic := '0';
+    signal tile_req   : std_logic;
 
     signal reg_done : std_logic;
     signal irq_out  : std_logic;
@@ -99,6 +103,8 @@ begin
             dma_ob_rd_en     => dma_ob_rd_en,
             dma_ob_rd_addr   => dma_ob_rd_addr,
             dma_ob_rd_data   => dma_ob_rd_data,
+            tile_ready       => tile_ready,
+            tile_req         => tile_req,
             reg_done         => reg_done,
             irq_out          => irq_out
         );
@@ -129,37 +135,17 @@ begin
         dma_wb_wr_en <= '0';
         wait until rising_edge( clk );
 
-        -- Cargar IFBuffer banco A: 14 direcciones unicas, todas 0x01
-        -- Incluyen bordes con wrapping: addr 255/257/259/285 son los pixeles de
-        -- la vecindad de (y=0,x=0) que caen fuera del tile (y-1, x-1)
+        -- Cargar IFBuffer banco A: direcciones 0 a 15, todas 0x01
+        -- ( toda la region con padding 4x4 que cubre el tile 2x2 + halo de 1px )
         buf_sel        <= '1';
         dma_if_wr_en   <= '1';
         dma_if_wr_data <= ALL_ONES_128;
         wait until rising_edge( clk );
 
-        -- Grupo [ 0, 6 ] (vecindad de pixeles (y=1,x=0) y (y=1,x=1) en el tile)
-        for addr in 0 to 6 loop
-            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 12 ) );
+        for addr in 0 to 15 loop
+            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 13 ) );
             wait until rising_edge( clk );
         end loop;
-
-        -- Grupo [ 30, 32 ] (vecindad del borde superior: row=15 del IFBuffer).
-        for addr in 30 to 32 loop
-            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 12 ) );
-            wait until rising_edge( clk );
-        end loop;
-
-        -- Direcciones de borde izquierdo ( col=255, wrapping de x-1 cuando x=0 )
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 255, 12 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 257, 12 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 259, 12 ) );
-        wait until rising_edge( clk );
-
-        -- Esquina superior-izquierda ( row=15, col=255 ): solo pixel (y=0, x=0) la usa.
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 285, 12 ) );
-        wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';
         wait until rising_edge( clk );

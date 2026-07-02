@@ -7,9 +7,10 @@ use ieee.numeric_std.all;
 -- Todas las activaciones y pesos = 0x01. Cada MAC acumula 16 productos
 -- de (1*1), entonces la salida esperada es 16 = 0x10 en cada byte.
 --
--- Direcciones IFBuffer (formula addr_in del addr_generator con tile_w=2, cin_groups=1):
---   pixel(y=0, x=0) -> addr=285  pixel(y=0, x=1) -> addr=30
---   pixel(y=1, x=0) -> addr=255  pixel(y=1, x=1) -> addr=0
+-- Direcciones IFBuffer (formula con padding: row_buf=y+ky, col_buf=x+kx,
+-- tile_w_pad=TILE_W+2=4, cin_groups=1; PW1x1 mantiene ky=kx=0 fijo):
+--   pixel(y=0, x=0) -> addr=0  pixel(y=0, x=1) -> addr=1
+--   pixel(y=1, x=0) -> addr=4  pixel(y=1, x=1) -> addr=5
 --
 -- Direcciones OFBuffer (addr_out = 2*y + x):
 --   [0]=pixel(0,0)  [1]=pixel(0,1)  [2]=pixel(1,0)  [3]=pixel(1,1)
@@ -47,7 +48,7 @@ architecture Behavioral of tb_cnn_accelerator is
 
     signal buf_sel          : std_logic := '0';
     signal dma_if_wr_en     : std_logic := '0';
-    signal dma_if_wr_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
+    signal dma_if_wr_addr   : std_logic_vector( 12 downto 0 ) := ( others => '0' );
     signal dma_if_wr_data   : std_logic_vector( 127 downto 0 ) := ( others => '0' );
 
     signal dma_wb_wr_en     : std_logic := '0';
@@ -61,6 +62,9 @@ architecture Behavioral of tb_cnn_accelerator is
     signal dma_ob_rd_en     : std_logic := '0';
     signal dma_ob_rd_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
     signal dma_ob_rd_data   : std_logic_vector( 127 downto 0 );
+
+    signal tile_ready : std_logic := '0';
+    signal tile_req   : std_logic;
 
     signal reg_done : std_logic;
     signal irq_out  : std_logic;
@@ -101,6 +105,8 @@ begin
             dma_ob_rd_en     => dma_ob_rd_en,
             dma_ob_rd_addr   => dma_ob_rd_addr,
             dma_ob_rd_data   => dma_ob_rd_data,
+            tile_ready       => tile_ready,
+            tile_req         => tile_req,
             reg_done         => reg_done,
             irq_out          => irq_out
         );
@@ -136,13 +142,13 @@ begin
         dma_if_wr_data <= ALL_ONES_128;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 285, 12 ) );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) );
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 30, 12 ) );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) );
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 255, 12 ) );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) );
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 12 ) );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) );
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';

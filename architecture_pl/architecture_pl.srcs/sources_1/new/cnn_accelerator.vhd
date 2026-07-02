@@ -27,7 +27,7 @@ entity cnn_accelerator is
         -- DMA - IFBuffer.
         buf_sel            : in std_logic;
         dma_if_wr_en       : in std_logic;
-        dma_if_wr_addr     : in std_logic_vector( 11 downto 0 ); 
+        dma_if_wr_addr     : in std_logic_vector( 12 downto 0 ); 
         dma_if_wr_data     : in std_logic_vector( 127 downto 0 );
         -- DMA - WeightBuffer.
         dma_wb_wr_en       : in std_logic;
@@ -250,7 +250,7 @@ begin
             dma_wr_addr     => dma_if_wr_addr,
             dma_wr_data     => dma_if_wr_data,
             rd_en           => sig_addr_en,
-            rd_addr         => ag_addr_in( 11 downto 0 ),
+            rd_addr         => ag_addr_in( 12 downto 0 ),
             data_out        => ifbuf_data_out
         );
 

@@ -5,7 +5,7 @@ use ieee.numeric_std.all;
 entity inputf_buf is
     generic(
         DATA_WIDTH : integer := 128; -- Bits por palabra.
-        ADDR_WIDTH : integer := 12   -- Bits de dirección ( 4096 posiciones ).
+        ADDR_WIDTH : integer := 13   -- Bits de direcciÃ³n ( 8192 posiciones ).
     );
     port(
         clk         : in  std_logic;

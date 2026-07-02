@@ -7,8 +7,9 @@ use ieee.numeric_std.all;
 -- Todas las activaciones y pesos = 0x01.
 -- Cada MAC acumula 9 productos de (1*1) = 9. Con shift=0: 9 >> 0 = 9 = 0x09.
 --
--- Direcciones IFBuffer (14 palabras unicas):
---   addr: 0, 1, 2, 3, 4, 5, 6, 30, 31, 32, 255, 257, 259, 285
+-- Direcciones IFBuffer (16 palabras, addr 0 a 15):
+--   Con padding explicito (row_buf=y+ky, col_buf=x+kx, tile_w_pad=TILE_W+2=4),
+--   un tile 2x2 con kernel 3x3 cubre toda la region con padding 4x4.
 --   Con Cin=16 (cin_groups=1, co_counter=0) la formula addr_in DW3x3
 --   coincide con Conv3x3, por lo que las direcciones son identicas.
 --
@@ -46,7 +47,7 @@ architecture Behavioral of tb_dw3x3 is
 
     signal buf_sel          : std_logic := '0';
     signal dma_if_wr_en     : std_logic := '0';
-    signal dma_if_wr_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
+    signal dma_if_wr_addr   : std_logic_vector( 12 downto 0 ) := ( others => '0' );
     signal dma_if_wr_data   : std_logic_vector( 127 downto 0 ) := ( others => '0' );
 
     signal dma_wb_wr_en     : std_logic := '0';
@@ -60,6 +61,9 @@ architecture Behavioral of tb_dw3x3 is
     signal dma_ob_rd_en     : std_logic := '0';
     signal dma_ob_rd_addr   : std_logic_vector( 11 downto 0 ) := ( others => '0' );
     signal dma_ob_rd_data   : std_logic_vector( 127 downto 0 );
+
+    signal tile_ready : std_logic := '0';
+    signal tile_req   : std_logic;
 
     signal reg_done : std_logic;
     signal irq_out  : std_logic;
@@ -100,6 +104,8 @@ begin
             dma_ob_rd_en     => dma_ob_rd_en,
             dma_ob_rd_addr   => dma_ob_rd_addr,
             dma_ob_rd_data   => dma_ob_rd_data,
+            tile_ready       => tile_ready,
+            tile_req         => tile_req,
             reg_done         => reg_done,
             irq_out          => irq_out
         );
@@ -130,36 +136,17 @@ begin
         dma_wb_wr_en <= '0';
         wait until rising_edge( clk );
 
-        -- Cargar IFBuffer banco A: 14 direcciones unicas, todas 0x01
+        -- Cargar IFBuffer banco A: direcciones 0 a 15, todas 0x01
         -- Con Cin=16 (cin_groups=1, co_counter=0), addr_in DW3x3 = addr_in Conv3x3.
         buf_sel        <= '1';
         dma_if_wr_en   <= '1';
         dma_if_wr_data <= ALL_ONES_128;
         wait until rising_edge( clk );
 
-        -- Grupo [0, 6]
-        for addr in 0 to 6 loop
-            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 12 ) );
+        for addr in 0 to 15 loop
+            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 13 ) );
             wait until rising_edge( clk );
         end loop;
-
-        -- Grupo [30, 32] (borde superior, row=15)
-        for addr in 30 to 32 loop
-            dma_if_wr_addr <= std_logic_vector( to_unsigned( addr, 12 ) );
-            wait until rising_edge( clk );
-        end loop;
-
-        -- Borde izquierdo (col=255, wrapping de x-1 cuando x=0)
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 255, 12 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 257, 12 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 259, 12 ) );
-        wait until rising_edge( clk );
-
-        -- Esquina superior-izquierda (row=15, col=255)
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 285, 12 ) );
-        wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';
         wait until rising_edge( clk );
