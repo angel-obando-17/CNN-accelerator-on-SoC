@@ -22,8 +22,6 @@ The model — MobileNetV2, trained and quantized to INT8 — reaches **94.14% ac
 ## Architecture
 ![Structure of a CNN](images/cnn_architecture.png)
 
-*(Replace with an actual diagram from `images/` if you have one — a real block diagram here will do more for this repo than almost anything else you add.)*
-
 ## Repository structure
 
 ```

@@ -21,6 +21,8 @@ Banco de registros propio del DMA (AXI-Lite slave separado del banco del acelera
 | 0x38 | DMA_ADDR_OUT | W | [31:0] | Dirección DDR del feature map de salida |
 | 0x3C | DMA_ADDR_RES | W | [31:0] | Dirección DDR del residual (si aplica) |
 | 0x40 | DMA_DONE | R | [0] | 1 = el DMA terminó toda la capa (genera IRQ hacia el PS) |
+| 0x44 | DMA_POOL_EN | W | [0] | 1 = esta capa tiene pooling activo (MaxPool o GAP) |
+| 0x48 | DMA_POOL_TYPE | W | [0] | 0 = MaxPool 2x2, 1 = GAP (mismo encoding que `reg_pool_type`) |
 
 ## Por qué se duplican CIN/COUT/MODE con los registros del acelerador
 
@@ -30,6 +32,6 @@ El DMA es un módulo AXI-Lite separado, sin acceso directo a los registros inter
 
 `buf_sel` y las señales `dma_if_wr_en/addr/data`, `dma_wb_wr_en/addr/data`, etc. que ya existen en `cnn_accelerator` **no** son registros PS — los va a generar la FSM orquestadora del DMA internamente (Componente 3). No son configuración que el PS escriba, son control interno del DMA hacia el acelerador.
 
-## Pendiente
+## Direccionamiento DDR
 
-Las fórmulas exactas de direccionamiento DDR (cómo se calcula la dirección de cada tile a partir de `DMA_ADDR_IN`/`DMA_IMG_W`/`DMA_TILE_W`/etc., incluyendo el halo de 1px para Conv3x3/DW3x3) se documentan en una sesión aparte dedicada al generador de direcciones del DMA — ver `dma/` (pendiente de crear ese archivo).
+Las fórmulas exactas (IFM con halo, OFM/Residual, pesos) están en `dma/ddr_addressing.md`.
