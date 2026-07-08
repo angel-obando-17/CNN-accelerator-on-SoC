@@ -39,16 +39,18 @@ Con el IFBuffer ya con padding, el acelerador solo consume **69.29% de BRAM**, d
 
 **Recomendacion (ahora con mas peso que antes)**: usar FIFOs poco profundas (32-64 entradas) en el AXI4 Master, implementadas en **distributed RAM** (LUTRAM) en vez de BRAM dedicada — cuestan LUTs (con muchisimo margen, 15.02% usado) en vez de BRAM (con margen mucho mas ajustado). El resto del DMA (banco de registros, FSM orquestadora, generador de direcciones DDR) es logica de control — no deberia tocar BRAM en absoluto si se diseña con cuidado.
 
-## Estimado LUT del DMA restante (sigue sin medir — componentes aun no implementados)
+## AXI4 Master — MEDIDO (sintesis aislada, 2026-07-08)
 
-| Bloque | LUTs (estimado) | Comentario |
-|---|---|---|
-| `reg_bank` (ya construido y sintetizado dentro del 15.02% de arriba? — pendiente aislar) | ~200-400 | Comparable a `axi_lite_slave.vhd`, muy chico |
-| AXI4 Master ×2 (lectura+escritura) | ~1,500-3,000 | FSM de bursts + contadores + conversor de ancho 128↔64 bits |
-| FSM orquestadora + padding | ~800-1,500 | Similar orden de magnitud a `fsm_cnn_acc` + `fsm_addr_generator` juntos |
-| Generador de direcciones DDR | ~500-1,000 | Aritmetica similar a `addr_generator` |
-| **Total DMA restante** | **~2,800-5,900 LUTs** | ≈ 5.3%-11.1% del chip, adicional — margen amplio (15.02% usado hoy) |
+| Modulo | LUTs | FF | BRAM |
+|---|---|---|---|
+| `axi4_read_master.vhd` | 66 (0.12%) | 137 (0.13%) | 0 |
+| `axi4_write_master.vhd` | 146 (0.27%) | 82 (0.08%) | 0 |
+| **Total AXI4 Master** | **212 (0.40%)** | **219 (0.21%)** | **0** |
+
+Muy por debajo del estimado inicial (~1,500-3,000 LUTs) — al ser FSMs de control puro con contadores en flip-flops (sin FIFOs, sin conversores de ancho complejos mas alla de ensamblar 2 beats de 64 bits), el costo real es casi nulo. **Confirma la decision de la Opcion A** (master simple, sin BRAM) y la recomendacion de cuidar BRAM en el resto del DMA — con estos dos modulos, CERO bloques BRAM adicionales sobre el 69.29% ya medido del acelerador.
+
+Nota: sintesis en aislamiento (solo el modulo, sin el resto del sistema) — el numero final tras integrar todo el DMA con el acelerador podria variar levemente por optimizaciones cruzadas de Vivado, pero da una cota muy confiable dado lo simple del diseño.
 
 ## Pendiente
 
-Reemplazar el estimado de LUTs del DMA restante por el numero real conforme se vaya implementando cada componente y sintetizando. El numero de BRAM (69.29%, medido) ya es definitivo para la configuracion actual del acelerador — lo que quede por sumar viene solo del DMA.
+Falta implementar y medir: generador de direcciones DDR, FSM orquestadora. El estimado LUT para esas dos piezas (~1,300-2,500 LUTs combinados) sigue sin medir — se actualizara cuando esten implementadas. El numero de BRAM (69.29% acelerador + 0% AXI4 Master = 69.29% acumulado) ya es solido; lo que falta por sumar depende de si la FSM orquestadora necesita algun registro/tabla adicional (no deberia, es logica de control).
