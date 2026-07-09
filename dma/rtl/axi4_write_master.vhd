@@ -65,9 +65,7 @@ begin
             sig_ddr_addr    <= ( others => '0' );
             sig_local_addr  <= ( others => '0' );
             sig_words_left  <= ( others => '0' );
-            sig_chunk_words <= ( others => '0' );
             sig_chunk_left  <= ( others => '0' );
-            sig_awlen       <= ( others => '0' );
 
         elsif( rising_edge( clk ) ) then
             current_state <= next_state;
@@ -81,15 +79,7 @@ begin
                     end if;
 
                 when AW_ADDR =>
-                    if( sig_words_left > CHUNK_WORDS ) then
-                        sig_chunk_words <= CHUNK_WORDS;
-                        sig_chunk_left  <= CHUNK_WORDS;
-                        sig_awlen       <= std_logic_vector( to_unsigned( 127, 8 ) );
-                    else
-                        sig_chunk_words <= sig_words_left;
-                        sig_chunk_left  <= sig_words_left;
-                        sig_awlen       <= std_logic_vector( resize( shift_left( sig_words_left, 1 ) - 1, 8 ) );
-                    end if;
+                    sig_chunk_left <= sig_chunk_words;
 
                 when W_HIGH =>
                     if( sig_wvalid = '1' and m_axi_wready = '1' ) then
@@ -197,6 +187,9 @@ begin
     -- AW Channel ( Write Address ).
     m_axi_awid    <= "0000";
     m_axi_awaddr  <= std_logic_vector( sig_ddr_addr );
+    sig_chunk_words <= CHUNK_WORDS when ( sig_words_left > CHUNK_WORDS ) else sig_words_left;
+    sig_awlen <= std_logic_vector( to_unsigned( 127, 8 ) ) when ( sig_words_left > CHUNK_WORDS ) else
+                 std_logic_vector( resize( shift_left( sig_words_left, 1 ) - 1, 8 ) );
     m_axi_awlen   <= sig_awlen;
     m_axi_awsize  <= "011";
     m_axi_awburst <= "01";

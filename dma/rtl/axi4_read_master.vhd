@@ -64,8 +64,6 @@ begin
             sig_ddr_addr    <= ( others => '0' );
             sig_local_addr  <= ( others => '0' );
             sig_words_left  <= ( others => '0' );
-            sig_chunk_words <= ( others => '0' );
-            sig_arlen       <= ( others => '0' );
             sig_low_beat    <= ( others => '0' );
             sig_have_low    <= '0';
 
@@ -82,13 +80,6 @@ begin
                     sig_have_low <= '0';
 
                 when AR_ADDR =>
-                    if( sig_words_left > CHUNK_WORDS ) then
-                        sig_chunk_words <= CHUNK_WORDS;
-                        sig_arlen       <= std_logic_vector( to_unsigned( 127, 8 ) );
-                    else
-                        sig_chunk_words <= sig_words_left;
-                        sig_arlen       <= std_logic_vector( resize( shift_left( sig_words_left, 1 ) - 1, 8 ) );
-                    end if;
                     sig_have_low <= '0';
 
                 when R_DATA =>
@@ -167,6 +158,9 @@ begin
     -- AR Channel ( Read Address ).
     m_axi_arid    <= "0000";
     m_axi_araddr  <= std_logic_vector( sig_ddr_addr );
+    sig_chunk_words <= CHUNK_WORDS when ( sig_words_left > CHUNK_WORDS ) else sig_words_left;
+    sig_arlen <= std_logic_vector( to_unsigned( 127, 8 ) ) when ( sig_words_left > CHUNK_WORDS ) else
+                 std_logic_vector( resize( shift_left( sig_words_left, 1 ) - 1, 8 ) );
     m_axi_arlen   <= sig_arlen;
     m_axi_arsize  <= "011";
     m_axi_arburst <= "01";  
