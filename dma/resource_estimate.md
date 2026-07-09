@@ -51,6 +51,30 @@ Muy por debajo del estimado inicial (~1,500-3,000 LUTs) — al ser FSMs de contr
 
 Nota: sintesis en aislamiento (solo el modulo, sin el resto del sistema) — el numero final tras integrar todo el DMA con el acelerador podria variar levemente por optimizaciones cruzadas de Vivado, pero da una cota muy confiable dado lo simple del diseño.
 
+## DMA Engine completo — MEDIDO (sintesis de dma_engine.vhd, 2026-07-08)
+
+`dma_engine.vhd` instancia los 5 bloques del DMA juntos ( `reg_bank`, `ddr_addr_gen`, `dma_fsm`, `axi4_read_master`, `axi4_write_master` ):
+
+| Recurso | Uso |
+|---|---|
+| Slice LUTs | 1,112 (2.09%) |
+| Slice Registers (FF) | 492 (0.46%) |
+| Block RAM Tile | **0 (0.00%)** |
+| DSP | 4 (1.82%) |
+
+**Cero BRAM confirmado en todo el DMA** — se cumplio el objetivo de diseño de principio a fin (Opcion A del AXI4 Master, banco de registros y FSM orquestadora como logica de control pura). Los 4 DSP son nuevos frente a la sintesis aislada de los masters (que dieron 0) — probablemente Vivado eligio DSP48 para alguna multiplicacion de `ddr_addr_gen` en vez de LUTs, una eleccion de la herramienta, no un problema ( 220 DSPs disponibles, margen enorme ).
+
+## Panorama del sistema completo ( acelerador + DMA, sin cnn_top todavia )
+
+| Recurso | Acelerador ( con padding ) | DMA Engine | **Total** | Margen |
+|---|---|---|---|---|
+| LUT | 15.02% | 2.09% | **~17.11%** | Amplio |
+| FF | 2.89% | 0.46% | **~3.35%** | Amplio |
+| BRAM | 69.29% | 0.00% | **69.29%** | 30.71% |
+| DSP | 7.27% | 1.82% | **~9.09%** | Amplio |
+
+BRAM sigue siendo el unico recurso ajustado, pero el DMA no le sumo absolutamente nada — todo el margen que quedaba (30.71%) sigue disponible. Este es un argumento solido y con datos reales (no estimados) para justificar el Zynq-7020 ante la asesora.
+
 ## Pendiente
 
-Falta implementar y medir: generador de direcciones DDR, FSM orquestadora. El estimado LUT para esas dos piezas (~1,300-2,500 LUTs combinados) sigue sin medir — se actualizara cuando esten implementadas. El numero de BRAM (69.29% acelerador + 0% AXI4 Master = 69.29% acumulado) ya es solido; lo que falta por sumar depende de si la FSM orquestadora necesita algun registro/tabla adicional (no deberia, es logica de control).
+Falta `cnn_top` ( wrapper final: PS7 + AXI-Lite + AXI-HP x2 + IRQ ), que deberia agregar muy poco ( logica de interconexion, sin computo ni memoria propia ). Se medira cuando exista.

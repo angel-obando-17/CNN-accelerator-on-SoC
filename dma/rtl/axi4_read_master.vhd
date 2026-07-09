@@ -54,7 +54,6 @@ architecture Behavioral of axi4_read_master is
     signal sig_low_beat : std_logic_vector( 63 downto 0 ) := ( others => '0' );
     signal sig_have_low : std_logic := '0';
 
-    -- Copia interna de m_axi_rready ( puerto 'out', no se puede leer directo ).
     signal sig_rready : std_logic;
 begin
 
@@ -85,7 +84,7 @@ begin
                 when AR_ADDR =>
                     if( sig_words_left > CHUNK_WORDS ) then
                         sig_chunk_words <= CHUNK_WORDS;
-                        sig_arlen       <= std_logic_vector( to_unsigned( 127, 8 ) ); -- 64*2 - 1.
+                        sig_arlen       <= std_logic_vector( to_unsigned( 127, 8 ) );
                     else
                         sig_chunk_words <= sig_words_left;
                         sig_arlen       <= std_logic_vector( resize( shift_left( sig_words_left, 1 ) - 1, 8 ) );

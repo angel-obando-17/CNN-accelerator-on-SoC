@@ -55,7 +55,6 @@ architecture Behavioral of axi4_write_master is
     signal sig_chunk_left  : unsigned(  9 downto 0 ) := ( others => '0' );
     signal sig_awlen       : std_logic_vector(  7 downto 0 ) := ( others => '0' );
 
-    -- Copia interna de m_axi_wvalid ( puerto 'out', no se puede leer directo ).
     signal sig_wvalid : std_logic;
 begin
 

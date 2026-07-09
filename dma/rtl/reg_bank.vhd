@@ -47,7 +47,9 @@ entity reg_bank is
         dma_addr_w        : out std_logic_vector( 31 downto 0 );
         dma_addr_in       : out std_logic_vector( 31 downto 0 );
         dma_addr_out      : out std_logic_vector( 31 downto 0 );
-        dma_addr_res      : out std_logic_vector( 31 downto 0 )
+        dma_addr_res      : out std_logic_vector( 31 downto 0 );
+        dma_pool_en       : out std_logic;
+        dma_pool_type     : out std_logic
     );
 end reg_bank;
 
@@ -84,6 +86,8 @@ architecture Behavioral of reg_bank is
     signal r34_addr_in      : std_logic_vector( 31 downto 0 );
     signal r38_addr_out     : std_logic_vector( 31 downto 0 );
     signal r3c_addr_res     : std_logic_vector( 31 downto 0 );
+    signal r44_pool_en      : std_logic;
+    signal r48_pool_type    : std_logic;
 
 begin
 
@@ -112,6 +116,8 @@ begin
                 r34_addr_in      <= ( others => '0' );
                 r38_addr_out     <= ( others => '0' );
                 r3c_addr_res     <= ( others => '0' );
+                r44_pool_en      <= '0';
+                r48_pool_type    <= '0';
                 sig_b_valid      <= '0';
 
             else
@@ -154,6 +160,10 @@ begin
                             r38_addr_out     <= dma_w_data;
                         when "0111100" =>
                             r3c_addr_res     <= dma_w_data;
+                        when "1000100" =>
+                            r44_pool_en      <= dma_w_data( 0 );
+                        when "1001000" =>
+                            r48_pool_type    <= dma_w_data( 0 );
                         when others => null;
                     end case;
                 end if;
@@ -219,7 +229,11 @@ begin
                             sig_r_data <= r3c_addr_res;
                         when "1000000" =>
                             sig_r_data <= ( 31 downto 1 => '0' ) & dma_done;
-                        when others => 
+                        when "1000100" =>
+                            sig_r_data <= ( 31 downto 1 => '0' ) & r44_pool_en;
+                        when "1001000" =>
+                            sig_r_data <= ( 31 downto 1 => '0' ) & r48_pool_type;
+                        when others =>
                             sig_r_data <= ( others => '0' );     
                     end case;
                 else
@@ -261,5 +275,7 @@ begin
     dma_addr_in      <= r34_addr_in;
     dma_addr_out     <= r38_addr_out;
     dma_addr_res     <= r3c_addr_res;
+    dma_pool_en      <= r44_pool_en;
+    dma_pool_type    <= r48_pool_type;
 
 end Behavioral;
