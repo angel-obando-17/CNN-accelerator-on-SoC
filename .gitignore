@@ -8,6 +8,7 @@
 /CNN/PlantVillage_segmentado
 /CNN/resultados_experimentos/segmentacion/pares
 /runtime_bare_metal/.vscode
+/runtime_bare_metal/vitis_ws
 /CNN/evaluate.py
 /architecture_pl/architecture_pl.cache
 /architecture_pl/architecture_pl.hw
@@ -41,4 +42,5 @@
 *.ini
 *.lpr
 *.xpr
+!/runtime_bare_metal/scripts/*.tcl
 
