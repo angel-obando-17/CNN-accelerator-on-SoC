@@ -49,7 +49,10 @@ entity reg_bank is
         dma_addr_out      : out std_logic_vector( 31 downto 0 );
         dma_addr_res      : out std_logic_vector( 31 downto 0 );
         dma_pool_en       : out std_logic;
-        dma_pool_type     : out std_logic
+        dma_pool_type     : out std_logic;
+        
+        -- To DMA.
+        dma_irq           : out std_logic
     );
 end reg_bank;
 
@@ -89,6 +92,9 @@ architecture Behavioral of reg_bank is
     signal r44_pool_en      : std_logic;
     signal r48_pool_type    : std_logic;
 
+    -- Latch dma_done.
+    signal r40_done_latched : std_logic;
+    
 begin
 
     write_en     <= dma_aw_valid and dma_w_valid and not( sig_b_valid );
@@ -116,11 +122,18 @@ begin
                 r34_addr_in      <= ( others => '0' );
                 r38_addr_out     <= ( others => '0' );
                 r3c_addr_res     <= ( others => '0' );
+                r40_done_latched <= '0';
                 r44_pool_en      <= '0';
                 r48_pool_type    <= '0';
                 sig_b_valid      <= '0';
 
             else
+                if( dma_done = '1' ) then
+                    r40_done_latched <= '1';
+                elsif( write_en = '1' and dma_aw_addr = "1000000" and dma_w_data( 0 ) = '1' ) then
+                    r40_done_latched <= '0';
+                end if;
+                
                 if( write_en = '1' ) then
                     aw_addr_lat <= dma_aw_addr;
                     w_data_lat  <= dma_w_data;
@@ -175,12 +188,12 @@ begin
                 if( sig_b_valid = '1' and dma_b_ready = '1' ) then
                     sig_b_valid <= '0';
                 end if;
-
+               
             end if;
         end if;
     end process;
 
--- Read Path.
+    -- Read Path.
     process( dma_clk )
     begin
         if( rising_edge( dma_clk ) ) then
@@ -228,7 +241,7 @@ begin
                         when "0111100" =>
                             sig_r_data <= r3c_addr_res;
                         when "1000000" =>
-                            sig_r_data <= ( 31 downto 1 => '0' ) & dma_done;
+                            sig_r_data <= ( 31 downto 1 => '0' ) & r40_done_latched;
                         when "1000100" =>
                             sig_r_data <= ( 31 downto 1 => '0' ) & r44_pool_en;
                         when "1001000" =>
@@ -247,7 +260,7 @@ begin
             end if;
         end if;
     end process;
-
+    
     -- Connect inner signals to AXI ports.
     dma_aw_ready <= sig_aw_ready;
     dma_w_ready  <= sig_w_ready;
@@ -277,5 +290,6 @@ begin
     dma_addr_res     <= r3c_addr_res;
     dma_pool_en      <= r44_pool_en;
     dma_pool_type    <= r48_pool_type;
+    dma_irq          <= r40_done_latched;
 
 end Behavioral;

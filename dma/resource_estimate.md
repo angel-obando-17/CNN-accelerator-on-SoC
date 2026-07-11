@@ -75,6 +75,21 @@ Nota: sintesis en aislamiento (solo el modulo, sin el resto del sistema) — el 
 
 BRAM sigue siendo el unico recurso ajustado, pero el DMA no le sumo absolutamente nada — todo el margen que quedaba (30.71%) sigue disponible. Este es un argumento solido y con datos reales (no estimados) para justificar el Zynq-7020 ante la asesora.
 
+## cnn_top — MEDIDO (sintesis completa, 2026-07-11)
+
+`cnn_top.vhd` instancia `cnn_accelerator` + `axi_lite_slave` + `dma_engine`, pura interconexion sin computo ni memoria propia:
+
+| Recurso | Estimado (acelerador+DMA, sin cnn_top) | Medido (cnn_top real) | Diferencia |
+|---|---|---|---|
+| LUT | ~17.11% | **17.46%** (9,288 / 53,200) | +0.35pp |
+| FF | ~3.35% | **3.42%** (3,643 / 106,400) | +0.07pp |
+| BRAM | 69.29% | **69.29%** (97 / 140) | 0 |
+| DSP | ~9.09% (16+4) | **9.09%** (20 / 220) | 0 |
+
+Confirmado: el wrapper no agrega practicamente nada, tal como se predijo. Los 20 DSP se dividen en 16 del MAC array (forzados por `mac_dsp.xdc`, ver nota abajo) + 4 de `ddr_addr_gen` (inferidos automaticamente por Vivado).
+
+**Nota sobre `mac_dsp.xdc`**: la constraint que fuerza `USE_DSP48` en el MAC vivia solo en una carpeta local (`Downloads`, fuera del repo) y no estaba trackeada en git — al pasar `cnn_accelerator` a ser un nivel mas profundo dentro de `cnn_top`, la ruta jerarquica fija del constraint (`inst_mac_array/gen_macs[*].mac_inst/accumulator_reg[*]`, sin comodin al inicio) dejo de matchear y los 16 DSP del MAC desaparecieron silenciosamente (solo 4 DSP en el primer intento de sintesis de `cnn_top`, subieron LUTs a 20.22% al compensar en fabric). Fix: agregar `*` al inicio del patron (`*inst_mac_array/...`) para que sea independiente de cuantos niveles de jerarquia haya encima, y mover el archivo al repo.
+
 ## Pendiente
 
-Falta `cnn_top` ( wrapper final: PS7 + AXI-Lite + AXI-HP x2 + IRQ ), que deberia agregar muy poco ( logica de interconexion, sin computo ni memoria propia ). Se medira cuando exista.
+`cnn_top` completo y sintetizado. Siguiente: Block Design de Vivado (PS7 + AXI-Lite + AXI-HP + IRQ), conectando `cnn_top` al procesador.

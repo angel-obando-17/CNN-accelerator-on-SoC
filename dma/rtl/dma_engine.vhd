@@ -77,7 +77,10 @@ entity dma_engine is
         accel_start : out std_logic; -- To accelerator reg_start.
         tile_ready  : out std_logic;
         tile_req    : in  std_logic;
-        irq_out     : in  std_logic
+        irq_out     : in  std_logic;
+        
+        -- To PS.
+        dma_done    : out std_logic
     );
 end dma_engine;
 
@@ -191,7 +194,8 @@ begin
             dma_addr_out     => rb_addr_out,
             dma_addr_res     => rb_addr_res,
             dma_pool_en      => rb_pool_en,
-            dma_pool_type    => rb_pool_type
+            dma_pool_type    => rb_pool_type,
+            dma_irq          => dma_done
         );
 
     inst_ddr_addr_gen : entity work.ddr_addr_gen

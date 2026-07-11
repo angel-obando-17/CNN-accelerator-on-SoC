@@ -23,7 +23,7 @@ entity cnn_accelerator is
         shift              : in std_logic_vector( 4 downto 0 ); -- To quant_relu
         relu6_val          : in std_logic_vector( 7 downto 0 ); -- To quant_relu
         gap_shift          : in std_logic_vector( 4 downto 0 ); -- To gap_unit
-         tile_ready        : in std_logic;
+        tile_ready         : in std_logic;
         -- DMA - IFBuffer.
         buf_sel            : in std_logic;
         dma_if_wr_en       : in std_logic;
