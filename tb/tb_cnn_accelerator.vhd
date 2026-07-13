@@ -8,9 +8,10 @@ use ieee.numeric_std.all;
 -- de (1*1), entonces la salida esperada es 16 = 0x10 en cada byte.
 --
 -- Direcciones IFBuffer (formula con padding: row_buf=y+ky, col_buf=x+kx,
--- tile_w_pad=TILE_W+2=4, cin_groups=1; PW1x1 mantiene ky=kx=0 fijo):
---   pixel(y=0, x=0) -> addr=0  pixel(y=0, x=1) -> addr=1
---   pixel(y=1, x=0) -> addr=4  pixel(y=1, x=1) -> addr=5
+-- tile_w_pad=TILE_W+2=4, cin_groups=1; PW1x1 fija ky=kx=1, ver ky_kx_reset_val
+-- en addr_generator.vhd -- fix del 2026-07-11 para saltar el halo):
+--   pixel(y=0, x=0) -> addr=5  pixel(y=0, x=1) -> addr=6
+--   pixel(y=1, x=0) -> addr=9  pixel(y=1, x=1) -> addr=10
 --
 -- Direcciones OFBuffer (addr_out = 2*y + x):
 --   [0]=pixel(0,0)  [1]=pixel(0,1)  [2]=pixel(1,0)  [3]=pixel(1,1)
@@ -142,13 +143,13 @@ begin
         dma_if_wr_data <= ALL_ONES_128;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) );
-        wait until rising_edge( clk );
         dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 6, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 9, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 10, 13 ) );
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';

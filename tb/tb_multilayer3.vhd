@@ -20,8 +20,9 @@ use ieee.numeric_std.all;
 --   lo que el valor distinto entre tile 0 y tile 1 prueba que el recargo del
 --   IFBuffer durante TILE_WAIT realmente tomo efecto y no quedo dato viejo.
 --   IFBuffer banco A: buf_sel='1' escribe A, buf_sel='0' lee A.
---     pixel( 0, 0 ) = 0  pixel( 0, 1 ) = 1  pixel( 1, 0 ) = 4  pixel( 1, 1 ) = 5
---     (tile_w_pad=4, PW1x1 mantiene ky=kx=0 fijo, sin padding real).
+--     pixel( 0, 0 ) = 5  pixel( 0, 1 ) = 6  pixel( 1, 0 ) = 9  pixel( 1, 1 ) = 10
+--     (tile_w_pad=4, PW1x1 fija ky=kx=1, ver ky_kx_reset_val en
+--     addr_generator.vhd -- fix del 2026-07-11 para saltar el halo).
 --   WeightBuffer [ 0 - 15 ]: addr_w = co*Cin + ci, co = 0 (mismo peso, no se
 --   recarga entre tiles: los pesos son por capa, no por tile).
 --
@@ -31,7 +32,7 @@ use ieee.numeric_std.all;
 --   GAP acumula 4 pixeles: 4*16 = 64. gap_shift=2: 64 >> 2 = 16 = 0x10.
 --   OFBuffer[ 0 ] esperado: 0x10.
 --   IFBuffer banco B: buf_sel='0' escribe B, buf_sel='1' lee B.
---     mismas direcciones PW1x1 2x2: 0, 1, 4, 5.
+--     mismas direcciones PW1x1 2x2: 5, 6, 9, 10.
 --   WeightBuffer [ 0 - 15 ]: addr_w = co*Cin + ci, co = 0, recargado para esta capa.
 
 entity tb_multilayer3 is
@@ -164,13 +165,13 @@ begin
         dma_if_wr_data <= VAL_01;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) ); -- pixel(0,0)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) ); -- pixel(0,0)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) ); -- pixel(0,1)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 6, 13 ) ); -- pixel(0,1)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) ); -- pixel(1,0)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 9, 13 ) ); -- pixel(1,0)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) ); -- pixel(1,1)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 10, 13 ) ); -- pixel(1,1)
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';
@@ -231,13 +232,13 @@ begin
         dma_if_wr_data <= VAL_02;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) );
-        wait until rising_edge( clk );
         dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 6, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 9, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 10, 13 ) );
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';
@@ -298,13 +299,13 @@ begin
         dma_if_wr_data <= VAL_10;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) );
-        wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) );
-        wait until rising_edge( clk );
         dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 6, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 9, 13 ) );
+        wait until rising_edge( clk );
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 10, 13 ) );
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';

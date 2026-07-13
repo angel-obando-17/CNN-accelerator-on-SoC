@@ -20,8 +20,9 @@ use ieee.numeric_std.all;
 -- CAPA 2 | PW1x1 | tile 2x2 | acts=0x09
 --   16*(9*1) = 144, shift = 3 -> 144 >> 3 = 18 = 0x12.
 --   OFBuffer[ 0 - 3 ] esperado: 0x12...12.
---   IFBuffer banco B: 4 direcciones PW1x1 2x2 con 0x09 (tile_w_pad=4).
---     pixel( 0, 0 ) = 0  pixel( 0, 1 ) = 1  pixel( 1, 0 ) = 4  pixel( 1, 1 ) = 5.
+--   IFBuffer banco B: 4 direcciones PW1x1 2x2 con 0x09 (tile_w_pad=4, PW1x1
+--   fija ky=kx=1, ver ky_kx_reset_val en addr_generator.vhd -- fix del 2026-07-11):
+--     pixel( 0, 0 ) = 5  pixel( 0, 1 ) = 6  pixel( 1, 0 ) = 9  pixel( 1, 1 ) = 10.
 --   WeightBuffer [ 0 - 15 ]: addr_w = co*Cin + ci, co = 0.
 --
 -- CAPA 3 | DW3x3 | tile 2x2 | acts = 0x12
@@ -244,19 +245,19 @@ begin
 
         -- Cargar IFBuffer banco B (buf_sel = '0'): 4 direcciones PW1x1 2x2 con 0x09.
         -- Simula que el PS DMA-io los 4 pixeles de salida de L1 al IFBuffer B.
-        -- addr_in = y*tile_w_pad + x, tile_w_pad = 4, cin_groups = 1.
+        -- addr_in = (y+1)*tile_w_pad + (x+1), tile_w_pad = 4, cin_groups = 1.
         buf_sel        <= '0';
         dma_if_wr_en   <= '1';
         dma_if_wr_data <= VAL_09;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) ); -- pixel(0,0)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) ); -- pixel(0,0)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) ); -- pixel(0,1)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 6, 13 ) ); -- pixel(0,1)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) ); -- pixel(1,0)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 9, 13 ) ); -- pixel(1,0)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) ); -- pixel(1,1)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 10, 13 ) ); -- pixel(1,1)
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';

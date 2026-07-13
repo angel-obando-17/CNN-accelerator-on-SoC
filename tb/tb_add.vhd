@@ -9,9 +9,10 @@ use ieee.numeric_std.all;
 -- Add unit: sat8(0x10 + 0x01) = sat8(17) = 17 = 0x11. Sin saturacion (17 < 127).
 -- OFBuffer[0..3] esperado: 0x11...11.
 --
--- Direcciones IFBuffer (addr_in = (y+0)*tile_w_pad + (x+0), tile_w_pad=TILE_W+2=4,
--- cin_groups=1; PW1x1 mantiene ky=kx=0 fijo, sin padding real):
---   pixel(0,0)=0  pixel(0,1)=1  pixel(1,0)=4  pixel(1,1)=5
+-- Direcciones IFBuffer (addr_in = (y+ky)*tile_w_pad + (x+kx), tile_w_pad=TILE_W+2=4,
+-- cin_groups=1; PW1x1 fija ky=kx=1, ver ky_kx_reset_val en addr_generator.vhd
+-- -- fix del 2026-07-11 para saltar el halo):
+--   pixel(0,0)=5  pixel(0,1)=6  pixel(1,0)=9  pixel(1,1)=10
 -- Direcciones WeightBuffer: [0, 15] (co=0, ci=0..15)
 -- Direcciones ResidualBuffer: [0, 3] (addr_out = y*tile_w*num_co + x*num_co + co = 2y+x)
 
@@ -135,19 +136,19 @@ begin
         wait until rising_edge( clk );
 
         -- Cargar IFBuffer banco A (buf_sel='1'): 4 direcciones, todas 0x01.
-        -- addr_in PW1x1 = y*tile_w_pad + x, tile_w_pad=4, cin_groups=1.
+        -- addr_in PW1x1 = (y+1)*tile_w_pad + (x+1), tile_w_pad=4, cin_groups=1.
         buf_sel        <= '1';
         dma_if_wr_en   <= '1';
         dma_if_wr_data <= ALL_ONES_128;
         wait until rising_edge( clk );
 
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 0, 13 ) ); -- pixel(0,0)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) ); -- pixel(0,0)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 1, 13 ) ); -- pixel(0,1)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 6, 13 ) ); -- pixel(0,1)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 4, 13 ) ); -- pixel(1,0)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 9, 13 ) ); -- pixel(1,0)
         wait until rising_edge( clk );
-        dma_if_wr_addr <= std_logic_vector( to_unsigned( 5, 13 ) ); -- pixel(1,1)
+        dma_if_wr_addr <= std_logic_vector( to_unsigned( 10, 13 ) ); -- pixel(1,1)
         wait until rising_edge( clk );
 
         dma_if_wr_en <= '0';
