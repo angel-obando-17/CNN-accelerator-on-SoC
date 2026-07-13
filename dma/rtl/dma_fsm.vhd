@@ -75,6 +75,7 @@ architecture Behavioral of dma_fsm is
                          RES_READ, 
                          RES_NEXT, 
                          START_TILE,
+                         START_TILE_HOLD,
                          WAIT_ACCEL,
                          CHECK_OFM, 
                          OFM_WRITE, 
@@ -369,11 +370,16 @@ begin
             when START_TILE =>
                 if( reg_first_tile = '1' ) then
                     accel_start <= '1';
+                    next_state  <= START_TILE_HOLD;
                 else
                     tile_ready <= '1';
-                end if;
-                next_state <= WAIT_ACCEL;
-
+                    next_state <= WAIT_ACCEL;
+                end if;            
+            
+            when START_TILE_HOLD =>
+                accel_start <= '1';
+                next_state  <= WAIT_ACCEL;
+            
             when WAIT_ACCEL =>
                 if( tile_req = '1' or irq_out = '1' ) then
                     next_state <= CHECK_OFM;

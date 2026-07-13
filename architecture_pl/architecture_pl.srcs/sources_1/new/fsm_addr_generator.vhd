@@ -155,8 +155,9 @@ begin
                 else
                     next_state <= IDLE;
                 end if;
+
             when ACCUM =>
-                if( sig_inner_cnt = "0000000000" ) then
+                if( sig_inner_cnt = "0000000000" or sig_inner_cnt = "0000000001" ) then
                     mac_valid <= '0';
                 end if;
                 if( addr_en = '0' ) then          -- ? agregar esto
@@ -167,6 +168,7 @@ begin
                 else
                     next_state <= ACCUM;
                 end if;
+
             when PIXEL_END =>
                 pixel_done <= '1';
                 if( addr_en = '1' ) then
@@ -174,6 +176,7 @@ begin
                 else
                     next_state <= PIXEL_END;
                 end if;
+
             when LAYER_CHECK =>
                 pixel_done <= '1';
                 mac_valid  <= '0';
@@ -184,6 +187,7 @@ begin
                 else
                     next_state <= ACCUM;
                 end if;
+
             when TILE_HOLD =>
                 pixel_done <= '1';
                 mac_valid  <= '0';
@@ -192,6 +196,7 @@ begin
                 else
                     next_state <= TILE_HOLD;
                 end if;
+                
         end case;
         
     end process;

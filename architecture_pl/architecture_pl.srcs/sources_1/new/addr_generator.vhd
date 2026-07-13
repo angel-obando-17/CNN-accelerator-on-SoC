@@ -51,9 +51,10 @@ architecture Behavioral of addr_generator is
     signal sig_counter_reset : std_logic;
     signal sig_tile_boundary : std_logic;
     ---- Inner sub-counters.
-    signal sig_ci : unsigned( 6 downto 0 ) := ( others => '0' );
-    signal sig_ky : unsigned( 1 downto 0 ) := ( others => '0' );
-    signal sig_kx : unsigned( 1 downto 0 ) := ( others => '0' );
+    signal sig_ci          : unsigned( 6 downto 0 ) := ( others => '0' );
+    signal sig_ky          : unsigned( 1 downto 0 ) := ( others => '0' );
+    signal sig_kx          : unsigned( 1 downto 0 ) := ( others => '0' );
+    signal ky_kx_reset_val : unsigned( 1 downto 0 );
     ---- Active when FSM is in ACCUM state.
     signal accum_active : std_logic;
 begin
@@ -92,6 +93,7 @@ begin
     ky_out <= std_logic_vector( sig_ky );
     kx_out <= std_logic_vector( sig_kx );
     
+    ky_kx_reset_val <= "01" when reg_mode = "10" else "00";
     -- Flag to know when the fsm is in ACCUM State.
     accum_active <= addr_en and ( not sig_counter_reset ) and ( not sig_pixel_done );
 
@@ -100,19 +102,19 @@ begin
     begin
         if( reset = '1' ) then
             sig_ci <= ( others => '0' );
-            sig_ky <= ( others => '0' );
-            sig_kx <= ( others => '0' );
+            sig_ky <= ky_kx_reset_val;
+            sig_kx <= ky_kx_reset_val;
         elsif( rising_edge( clk ) ) then
 
             if( sig_counter_reset = '1' ) then
                 sig_ci <= ( others => '0' );
-                sig_ky <= ( others => '0' );
-                sig_kx <= ( others => '0' );
+                sig_ky <= ky_kx_reset_val;
+                sig_kx <= ky_kx_reset_val;
 
             elsif( sig_pixel_done = '1' and addr_en = '1' ) then
                 sig_ci <= ( others => '0' );
-                sig_ky <= ( others => '0' );
-                sig_kx <= ( others => '0' );
+                sig_ky <= ky_kx_reset_val;
+                sig_kx <= ky_kx_reset_val;
 
             elsif( accum_active = '1' ) then
                 case reg_mode is
@@ -138,7 +140,7 @@ begin
                             sig_kx <= sig_kx + 1;
                         end if;
                     when "10" =>
-                        -- PW1x1: only ci, kx and ky stay 0.
+                        -- PW1x1: only ci, kx and ky stay 1.
                         sig_ci <= sig_ci + 1;
                     when others => null;
                 end case;

@@ -38,7 +38,7 @@ entity fsm_cnn_accelerator is
 end fsm_cnn_accelerator;
 
 architecture Behavioral of fsm_cnn_accelerator is
-    type state_type is ( IDLE, COMPUTE, LATCH, POST, TILE_WAIT, FLUSH, DONE );
+    type state_type is ( IDLE, COMPUTE, DRAIN, LATCH, POST, TILE_WAIT, FLUSH, DONE );
 
     -- Aux signals.
     signal current_state, next_state : state_type;
@@ -99,6 +99,7 @@ begin
                 else
                     next_state <= IDLE;
                 end if;
+
             when COMPUTE =>
                 addr_en <= '1';
                 mac_en  <= mac_valid;
@@ -111,15 +112,22 @@ begin
                 end if;
                 
                 if( pixel_done = '1' ) then
-                    next_state <= LATCH;
+                    next_state <= DRAIN;
                 else
                     next_state <= COMPUTE;
                 end if;
-            when LATCH => 
+
+            when DRAIN =>
+                addr_en    <= '1';
+                mac_en     <= mac_valid;
+                next_state <= LATCH;
+
+            when LATCH =>
                 acc_bank_enable <= '1';
                 mac_clear       <= '1';
-                addr_en         <= '1';   
-                next_state <= POST; 
+                addr_en         <= '1';
+                next_state <= POST;
+
             when POST =>
                 relu_en  <= '1';
                 quant_en <= '1';
@@ -151,6 +159,7 @@ begin
                 else
                     next_state <= POST;
                 end if;
+
             when TILE_WAIT =>
                 tile_req <= '1';
                 addr_en  <= '1';
@@ -159,6 +168,7 @@ begin
                 else
                     next_state <= TILE_WAIT;
                 end if; 
+
             when FLUSH =>
                 pool_type_sel <= '1';
                 if( gap_done = '1' ) then
@@ -166,6 +176,7 @@ begin
                 else
                     next_state <= FLUSH;
                 end if;
+
             when DONE =>
                 reg_done <= '1';
                 irq_out  <= '1';
@@ -174,6 +185,8 @@ begin
                 else
                     next_state <= DONE;
                 end if;
+
         end case;
+
     end process;
 end Behavioral;
