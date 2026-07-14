@@ -42,42 +42,42 @@ architecture Behavioral of tb_cnn_top is
     signal reset : std_logic := '0'; -- Low Active.
 
     -- AXI-Lite #1 ( acelerador ).
-    signal axi_aw_addr  : std_logic_vector(  6 downto 0 ) := ( others => '0' );
-    signal axi_aw_valid : std_logic := '0';
-    signal axi_aw_ready : std_logic;
-    signal axi_w_data   : std_logic_vector( 31 downto 0 ) := ( others => '0' );
-    signal axi_w_strb   : std_logic_vector(  3 downto 0 ) := ( others => '1' );
-    signal axi_w_valid  : std_logic := '0';
-    signal axi_w_ready  : std_logic;
-    signal axi_b_resp   : std_logic_vector(  1 downto 0 );
-    signal axi_b_valid  : std_logic;
-    signal axi_b_ready  : std_logic := '0';
-    signal axi_ar_addr  : std_logic_vector(  6 downto 0 ) := ( others => '0' );
-    signal axi_ar_valid : std_logic := '0';
-    signal axi_ar_ready : std_logic;
-    signal axi_r_data   : std_logic_vector( 31 downto 0 );
-    signal axi_r_resp   : std_logic_vector(  1 downto 0 );
-    signal axi_r_valid  : std_logic;
-    signal axi_r_ready  : std_logic := '0';
+    signal axi_awaddr  : std_logic_vector(  6 downto 0 ) := ( others => '0' );
+    signal axi_awvalid : std_logic := '0';
+    signal axi_awready : std_logic;
+    signal axi_wdata   : std_logic_vector( 31 downto 0 ) := ( others => '0' );
+    signal axi_wstrb   : std_logic_vector(  3 downto 0 ) := ( others => '1' );
+    signal axi_wvalid  : std_logic := '0';
+    signal axi_wready  : std_logic;
+    signal axi_bresp   : std_logic_vector(  1 downto 0 );
+    signal axi_bvalid  : std_logic;
+    signal axi_bready  : std_logic := '0';
+    signal axi_araddr  : std_logic_vector(  6 downto 0 ) := ( others => '0' );
+    signal axi_arvalid : std_logic := '0';
+    signal axi_arready : std_logic;
+    signal axi_rdata   : std_logic_vector( 31 downto 0 );
+    signal axi_rresp   : std_logic_vector(  1 downto 0 );
+    signal axi_rvalid  : std_logic;
+    signal axi_rready  : std_logic := '0';
 
     -- AXI-Lite #2 ( DMA ).
-    signal s_axi_aw_addr  : std_logic_vector(  6 downto 0 ) := ( others => '0' );
-    signal s_axi_aw_valid : std_logic := '0';
-    signal s_axi_aw_ready : std_logic;
-    signal s_axi_w_data   : std_logic_vector( 31 downto 0 ) := ( others => '0' );
-    signal s_axi_w_strb   : std_logic_vector(  3 downto 0 ) := ( others => '1' );
-    signal s_axi_w_valid  : std_logic := '0';
-    signal s_axi_w_ready  : std_logic;
-    signal s_axi_b_resp   : std_logic_vector(  1 downto 0 );
-    signal s_axi_b_valid  : std_logic;
-    signal s_axi_b_ready  : std_logic := '0';
-    signal s_axi_ar_addr  : std_logic_vector(  6 downto 0 ) := ( others => '0' );
-    signal s_axi_ar_valid : std_logic := '0';
-    signal s_axi_ar_ready : std_logic;
-    signal s_axi_r_data   : std_logic_vector( 31 downto 0 );
-    signal s_axi_r_resp   : std_logic_vector(  1 downto 0 );
-    signal s_axi_r_valid  : std_logic;
-    signal s_axi_r_ready  : std_logic := '0';
+    signal s_axi_awaddr  : std_logic_vector(  6 downto 0 ) := ( others => '0' );
+    signal s_axi_awvalid : std_logic := '0';
+    signal s_axi_awready : std_logic;
+    signal s_axi_wdata   : std_logic_vector( 31 downto 0 ) := ( others => '0' );
+    signal s_axi_wstrb   : std_logic_vector(  3 downto 0 ) := ( others => '1' );
+    signal s_axi_wvalid  : std_logic := '0';
+    signal s_axi_wready  : std_logic;
+    signal s_axi_bresp   : std_logic_vector(  1 downto 0 );
+    signal s_axi_bvalid  : std_logic;
+    signal s_axi_bready  : std_logic := '0';
+    signal s_axi_araddr  : std_logic_vector(  6 downto 0 ) := ( others => '0' );
+    signal s_axi_arvalid : std_logic := '0';
+    signal s_axi_arready : std_logic;
+    signal s_axi_rdata   : std_logic_vector( 31 downto 0 );
+    signal s_axi_rresp   : std_logic_vector(  1 downto 0 );
+    signal s_axi_rvalid  : std_logic;
+    signal s_axi_rready  : std_logic := '0';
 
     -- AXI4 to DDR, Read.
     signal m_axi_r_arid    : std_logic_vector(  3 downto 0 );
@@ -142,40 +142,40 @@ begin
         port map(
             clk             => clk,
             reset           => reset,
-            axi_aw_addr     => axi_aw_addr,
-            axi_aw_valid    => axi_aw_valid,
-            axi_aw_ready    => axi_aw_ready,
-            axi_w_data      => axi_w_data,
-            axi_w_strb      => axi_w_strb,
-            axi_w_valid     => axi_w_valid,
-            axi_w_ready     => axi_w_ready,
-            axi_b_resp      => axi_b_resp,
-            axi_b_valid     => axi_b_valid,
-            axi_b_ready     => axi_b_ready,
-            axi_ar_addr     => axi_ar_addr,
-            axi_ar_valid    => axi_ar_valid,
-            axi_ar_ready    => axi_ar_ready,
-            axi_r_data      => axi_r_data,
-            axi_r_resp      => axi_r_resp,
-            axi_r_valid     => axi_r_valid,
-            axi_r_ready     => axi_r_ready,
-            s_axi_aw_addr   => s_axi_aw_addr,
-            s_axi_aw_valid  => s_axi_aw_valid,
-            s_axi_aw_ready  => s_axi_aw_ready,
-            s_axi_w_data    => s_axi_w_data,
-            s_axi_w_strb    => s_axi_w_strb,
-            s_axi_w_valid   => s_axi_w_valid,
-            s_axi_w_ready   => s_axi_w_ready,
-            s_axi_b_resp    => s_axi_b_resp,
-            s_axi_b_valid   => s_axi_b_valid,
-            s_axi_b_ready   => s_axi_b_ready,
-            s_axi_ar_addr   => s_axi_ar_addr,
-            s_axi_ar_valid  => s_axi_ar_valid,
-            s_axi_ar_ready  => s_axi_ar_ready,
-            s_axi_r_data    => s_axi_r_data,
-            s_axi_r_resp    => s_axi_r_resp,
-            s_axi_r_valid   => s_axi_r_valid,
-            s_axi_r_ready   => s_axi_r_ready,
+            axi_awaddr     => axi_awaddr,
+            axi_awvalid    => axi_awvalid,
+            axi_awready    => axi_awready,
+            axi_wdata      => axi_wdata,
+            axi_wstrb      => axi_wstrb,
+            axi_wvalid     => axi_wvalid,
+            axi_wready     => axi_wready,
+            axi_bresp      => axi_bresp,
+            axi_bvalid     => axi_bvalid,
+            axi_bready     => axi_bready,
+            axi_araddr     => axi_araddr,
+            axi_arvalid    => axi_arvalid,
+            axi_arready    => axi_arready,
+            axi_rdata      => axi_rdata,
+            axi_rresp      => axi_rresp,
+            axi_rvalid     => axi_rvalid,
+            axi_rready     => axi_rready,
+            s_axi_awaddr   => s_axi_awaddr,
+            s_axi_awvalid  => s_axi_awvalid,
+            s_axi_awready  => s_axi_awready,
+            s_axi_wdata    => s_axi_wdata,
+            s_axi_wstrb    => s_axi_wstrb,
+            s_axi_wvalid   => s_axi_wvalid,
+            s_axi_wready   => s_axi_wready,
+            s_axi_bresp    => s_axi_bresp,
+            s_axi_bvalid   => s_axi_bvalid,
+            s_axi_bready   => s_axi_bready,
+            s_axi_araddr   => s_axi_araddr,
+            s_axi_arvalid  => s_axi_arvalid,
+            s_axi_arready  => s_axi_arready,
+            s_axi_rdata    => s_axi_rdata,
+            s_axi_rresp    => s_axi_rresp,
+            s_axi_rvalid   => s_axi_rvalid,
+            s_axi_rready   => s_axi_rready,
             m_axi_r_arid    => m_axi_r_arid,
             m_axi_r_araddr  => m_axi_r_araddr,
             m_axi_r_arlen   => m_axi_r_arlen,
@@ -312,32 +312,32 @@ begin
 
         procedure axi_write_accel( addr : in integer; data : in std_logic_vector( 31 downto 0 ) ) is
         begin
-            axi_aw_addr  <= std_logic_vector( to_unsigned( addr, 7 ) );
-            axi_w_data   <= data;
-            axi_aw_valid <= '1';
-            axi_w_valid  <= '1';
+            axi_awaddr  <= std_logic_vector( to_unsigned( addr, 7 ) );
+            axi_wdata   <= data;
+            axi_awvalid <= '1';
+            axi_wvalid  <= '1';
             wait until rising_edge( clk );
-            axi_aw_valid <= '0';
-            axi_w_valid  <= '0';
-            wait until axi_b_valid = '1';
-            axi_b_ready <= '1';
+            axi_awvalid <= '0';
+            axi_wvalid  <= '0';
+            wait until axi_bvalid = '1';
+            axi_bready <= '1';
             wait until rising_edge( clk );
-            axi_b_ready <= '0';
+            axi_bready <= '0';
         end procedure;
 
         procedure axi_write_dma( addr : in integer; data : in std_logic_vector( 31 downto 0 ) ) is
         begin
-            s_axi_aw_addr  <= std_logic_vector( to_unsigned( addr, 7 ) );
-            s_axi_w_data   <= data;
-            s_axi_aw_valid <= '1';
-            s_axi_w_valid  <= '1';
+            s_axi_awaddr  <= std_logic_vector( to_unsigned( addr, 7 ) );
+            s_axi_wdata   <= data;
+            s_axi_awvalid <= '1';
+            s_axi_wvalid  <= '1';
             wait until rising_edge( clk );
-            s_axi_aw_valid <= '0';
-            s_axi_w_valid  <= '0';
-            wait until s_axi_b_valid = '1';
-            s_axi_b_ready <= '1';
+            s_axi_awvalid <= '0';
+            s_axi_wvalid  <= '0';
+            wait until s_axi_bvalid = '1';
+            s_axi_bready <= '1';
             wait until rising_edge( clk );
-            s_axi_b_ready <= '0';
+            s_axi_bready <= '0';
         end procedure;
 
         -- Standard Config for tile 2x2.

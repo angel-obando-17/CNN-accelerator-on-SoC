@@ -9,50 +9,50 @@ entity cnn_top is
         -- AXI-Lite Slave ( Accelerator ).
         -------------------------------------------------------------
             -- AW Channel - Write Address( Master -> Slave ).
-        axi_aw_addr     : in  std_logic_vector( 6 downto 0 );
-        axi_aw_valid    : in  std_logic;
-        axi_aw_ready    : out std_logic;
+        axi_awaddr     : in  std_logic_vector( 6 downto 0 );
+        axi_awvalid    : in  std_logic;
+        axi_awready    : out std_logic;
             -- W Channel - Write Data ( Master -> Slave ).
-        axi_w_data      : in  std_logic_vector( 31 downto 0 );
-        axi_w_strb      : in  std_logic_vector( 3 downto 0 );
-        axi_w_valid     : in  std_logic;
-        axi_w_ready     : out std_logic;
+        axi_wdata      : in  std_logic_vector( 31 downto 0 );
+        axi_wstrb      : in  std_logic_vector( 3 downto 0 );
+        axi_wvalid     : in  std_logic;
+        axi_wready     : out std_logic;
             -- B Channel - Write Response ( Slave -> Master ).
-        axi_b_resp      : out std_logic_vector( 1 downto 0 );
-        axi_b_valid     : out std_logic;
-        axi_b_ready     : in  std_logic;
+        axi_bresp      : out std_logic_vector( 1 downto 0 );
+        axi_bvalid     : out std_logic;
+        axi_bready     : in  std_logic;
             -- AR Channel - Read Address ( Master -> Slave ).
-        axi_ar_addr     : in  std_logic_vector( 6 downto 0 );
-        axi_ar_valid    : in  std_logic;
-        axi_ar_ready    : out std_logic;
+        axi_araddr     : in  std_logic_vector( 6 downto 0 );
+        axi_arvalid    : in  std_logic;
+        axi_arready    : out std_logic;
             -- R Channel - Read Data ( Slave -> Master ).
-        axi_r_data      : out std_logic_vector( 31 downto 0 );
-        axi_r_resp      : out std_logic_vector( 1 downto 0 );
-        axi_r_valid     : out std_logic;
-        axi_r_ready     : in  std_logic;
+        axi_rdata      : out std_logic_vector( 31 downto 0 );
+        axi_rresp      : out std_logic_vector( 1 downto 0 );
+        axi_rvalid     : out std_logic;
+        axi_rready     : in  std_logic;
         
         -------------------------------------------------------------
         -- DMA
         -------------------------------------------------------------
         
             -- AXI-Lite ( PS -> DMA Registers Bank ).
-        s_axi_aw_addr   : in  std_logic_vector(  6 downto 0 );
-        s_axi_aw_valid  : in  std_logic;
-        s_axi_aw_ready  : out std_logic;
-        s_axi_w_data    : in  std_logic_vector( 31 downto 0 );
-        s_axi_w_strb    : in  std_logic_vector(  3 downto 0 );
-        s_axi_w_valid   : in  std_logic;
-        s_axi_w_ready   : out std_logic;
-        s_axi_b_resp    : out std_logic_vector(  1 downto 0 );
-        s_axi_b_valid   : out std_logic;
-        s_axi_b_ready   : in  std_logic;
-        s_axi_ar_addr   : in  std_logic_vector(  6 downto 0 );
-        s_axi_ar_valid  : in  std_logic;
-        s_axi_ar_ready  : out std_logic;
-        s_axi_r_data    : out std_logic_vector( 31 downto 0 );
-        s_axi_r_resp    : out std_logic_vector(  1 downto 0 );
-        s_axi_r_valid   : out std_logic;
-        s_axi_r_ready   : in  std_logic;
+        s_axi_awaddr   : in  std_logic_vector(  6 downto 0 );
+        s_axi_awvalid  : in  std_logic;
+        s_axi_awready  : out std_logic;
+        s_axi_wdata    : in  std_logic_vector( 31 downto 0 );
+        s_axi_wstrb    : in  std_logic_vector(  3 downto 0 );
+        s_axi_wvalid   : in  std_logic;
+        s_axi_wready   : out std_logic;
+        s_axi_bresp    : out std_logic_vector(  1 downto 0 );
+        s_axi_bvalid   : out std_logic;
+        s_axi_bready   : in  std_logic;
+        s_axi_araddr   : in  std_logic_vector(  6 downto 0 );
+        s_axi_arvalid  : in  std_logic;
+        s_axi_arready  : out std_logic;
+        s_axi_rdata    : out std_logic_vector( 31 downto 0 );
+        s_axi_rresp    : out std_logic_vector(  1 downto 0 );
+        s_axi_rvalid   : out std_logic;
+        s_axi_rready   : in  std_logic;
 
             -- AXI4 to DDR ( read ports: weights, IFM, residual ).
         m_axi_r_arid    : out std_logic_vector(  3 downto 0 );
@@ -184,23 +184,23 @@ begin
         port map(
             axi_clk          => clk,
             axi_reset        => reset,
-            axi_aw_addr      => axi_aw_addr,
-            axi_aw_valid     => axi_aw_valid,
-            axi_aw_ready     => axi_aw_ready,
-            axi_w_data       => axi_w_data,
-            axi_w_strb       => axi_w_strb,
-            axi_w_valid      => axi_w_valid,
-            axi_w_ready      => axi_w_ready,
-            axi_b_resp       => axi_b_resp,
-            axi_b_valid      => axi_b_valid,
-            axi_b_ready      => axi_b_ready,
-            axi_ar_addr      => axi_ar_addr,
-            axi_ar_valid     => axi_ar_valid,
-            axi_ar_ready     => axi_ar_ready,
-            axi_r_data       => axi_r_data,
-            axi_r_resp       => axi_r_resp,
-            axi_r_valid      => axi_r_valid,
-            axi_r_ready      => axi_r_ready,
+            axi_aw_addr      => axi_awaddr,
+            axi_aw_valid     => axi_awvalid,
+            axi_aw_ready     => axi_awready,
+            axi_w_data       => axi_wdata,
+            axi_w_strb       => axi_wstrb,
+            axi_w_valid      => axi_wvalid,
+            axi_w_ready      => axi_wready,
+            axi_b_resp       => axi_bresp,
+            axi_b_valid      => axi_bvalid,
+            axi_b_ready      => axi_bready,
+            axi_ar_addr      => axi_araddr,
+            axi_ar_valid     => axi_arvalid,
+            axi_ar_ready     => axi_arready,
+            axi_r_data       => axi_rdata,
+            axi_r_resp       => axi_rresp,
+            axi_r_valid      => axi_rvalid,
+            axi_r_ready      => axi_rready,
             reg_done         => done_cnn_to_axi,
             reg_start        => open,
             reg_mode         => reg_mode_axi_to_cnn,
@@ -223,23 +223,23 @@ begin
         port map(
             clk             => clk,
             reset           => reset,
-            s_axi_aw_addr   => s_axi_aw_addr,
-            s_axi_aw_valid  => s_axi_aw_valid,  
-            s_axi_aw_ready  => s_axi_aw_ready,
-            s_axi_w_data    => s_axi_w_data,
-            s_axi_w_strb    => s_axi_w_strb,   
-            s_axi_w_valid   => s_axi_w_valid,   
-            s_axi_w_ready   => s_axi_w_ready, 
-            s_axi_b_resp    => s_axi_b_resp,
-            s_axi_b_valid   => s_axi_b_valid,
-            s_axi_b_ready   => s_axi_b_ready,
-            s_axi_ar_addr   => s_axi_ar_addr,
-            s_axi_ar_valid  => s_axi_ar_valid,
-            s_axi_ar_ready  => s_axi_ar_ready,
-            s_axi_r_data    => s_axi_r_data,
-            s_axi_r_resp    => s_axi_r_resp,
-            s_axi_r_valid   => s_axi_r_valid,
-            s_axi_r_ready   => s_axi_r_ready,
+            s_axi_aw_addr   => s_axi_awaddr,
+            s_axi_aw_valid  => s_axi_awvalid,  
+            s_axi_aw_ready  => s_axi_awready,
+            s_axi_w_data    => s_axi_wdata,
+            s_axi_w_strb    => s_axi_wstrb,   
+            s_axi_w_valid   => s_axi_wvalid,   
+            s_axi_w_ready   => s_axi_wready, 
+            s_axi_b_resp    => s_axi_bresp,
+            s_axi_b_valid   => s_axi_bvalid,
+            s_axi_b_ready   => s_axi_bready,
+            s_axi_ar_addr   => s_axi_araddr,
+            s_axi_ar_valid  => s_axi_arvalid,
+            s_axi_ar_ready  => s_axi_arready,
+            s_axi_r_data    => s_axi_rdata,
+            s_axi_r_resp    => s_axi_rresp,
+            s_axi_r_valid   => s_axi_rvalid,
+            s_axi_r_ready   => s_axi_rready,
             m_axi_r_arid    => m_axi_r_arid,
             m_axi_r_araddr  => m_axi_r_araddr,  
             m_axi_r_arlen   => m_axi_r_arlen,   

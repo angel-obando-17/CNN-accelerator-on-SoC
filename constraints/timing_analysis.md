@@ -233,10 +233,9 @@ ruta cierra timing limpio o no.**
   corrida completa de `cnn_top`. **Sí — slack normal (-2.311ns, dentro del
   mismo rango que el resto del diseño a 100MHz), no es un caso especial. No
   hace falta recodificar en one-hot.**
-- [ ] Cuando exista el Block Design con el PS7 real: correr Implementation
+- [x] Cuando exista el Block Design con el PS7 real: correr Implementation
   sobre el proyecto real completo (no out-of-context) para confirmar estos
-  números con `HD.CLK_SRC` resuelto correctamente, y aplicar el constraint
-  de 50 MHz al configurar `FCLK_CLK0`.
+  números. **Hecho (2026-07-14) — ver sección "Confirmación final" abajo.**
 
 ## Resultados (se va llenando con cada corrida)
 
@@ -245,4 +244,9 @@ ruta cierra timing limpio o no.**
 | 2026-07-13 | 10.000 ns (100 MHz) | -2.724 ns | `ddr_addr_gen.vhd` (2×DSP48E1 + 11×CARRY4, combinacional) | Falla feo. Corrida out-of-context en scratch, sin PS7 todavía. |
 | 2026-07-13 | 12.821 ns (78 MHz) | -0.293 ns | mismo, vía `axi4_write_master` | Falla apenas — casi cierra. |
 | 2026-07-13 | 13.333 ns (75 MHz) | -0.056 ns | mismo | Falla mínimo (2 endpoints) — corrida solo para dejar registro, no elegida. |
-| 2026-07-13 | 14.286 ns (70 MHz) | **+0.288 ns** | mismo | **Pasa. Elegido como frecuencia final para `FCLK_CLK0`.** |
+| 2026-07-13 | 14.286 ns (70 MHz) | **+0.288 ns** | mismo | **Pasa. Elegido como frecuencia final para `FCLK_CLK0`.** Corrida out-of-context en scratch, sin PS7 todavía. |
+| **2026-07-14** | **14.285 ns (70.004 MHz, `clk_fpga_0`)** | **+0.187 ns** | (no revisado en detalle, presumiblemente el mismo) | **CONFIRMACIÓN FINAL — diseño real completo** (PS7 + Processor System Reset + 4×AXI Protocol Converter + `cnn_top`, Block Design implementado de verdad, no scratch). WHS=+0.042ns, PWS=+6.012ns, 0 endpoints fallando en las 3. Margen un poco más ajustado que la estimación out-of-context (0.187 vs 0.288 esperado) por la lógica extra real (PS7/resets/converters — endpoints totales subieron de ~14000 a ~19600), pero sigue positivo y seguro. |
+
+## Confirmación final (2026-07-14)
+
+Con el Block Design completo implementado de verdad (ya no out-of-context), el timing a 70MHz se confirma limpio: `WNS=+0.187ns`, `WHS=+0.042ns`, `WPWS=+6.012ns`, cero endpoints fallando en cualquiera de los tres. **Esto cierra el análisis de timing definitivamente** — la frecuencia de `FCLK_CLK0` queda en 70MHz, confirmada tanto en scratch (out-of-context) como en el proyecto real.
