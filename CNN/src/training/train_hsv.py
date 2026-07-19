@@ -128,12 +128,18 @@ def run_model(
 
         model = builder( resolution, num_classes, max_ch )
         history, train_time = train_model( model, ds_train, ds_val, label, epochs )
-        plot_training_curves( history, label, output_dir )
 
+        # Guardar ANTES de graficar -- si el backend grafico falla (ej.
+        # entorno headless) no se pierde el entrenamiento.
         keras_path = os.path.join( output_dir, f"model_{ label }.keras" )
         model.save( keras_path )
         keras_kb = os.path.getsize( keras_path ) / 1024
         print( f"  Modelo guardado ({ keras_kb:.1f} KB)" )
+
+        try:
+            plot_training_curves( history, label, output_dir )
+        except Exception as e:
+            print( f"  [WARN] No se pudo graficar curvas de entrenamiento: { e }" )
 
         print( f"\n  >> Float32" )
         f32 = evaluate_model( model, ds_test, paths_test, y_test, class_names, label, resolution, output_dir, segment_fn )

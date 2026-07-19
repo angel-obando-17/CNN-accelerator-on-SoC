@@ -44,6 +44,12 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 from src.common.dataset import collect_file_paths, split_paths
 from src.common.segmentation import segment_hsv
 
+# Import registra las capas custom de QAT (FakeQuantConv2D, etc.) para que
+# models.load_model() pueda deserializar un modelo QAT sin importar desde
+# donde se invoque este script -- si el modelo cargado no es QAT, este
+# import no tiene ningun efecto.
+from src.quantization.qat import layers as _qat_layers  # noqa: F401
+
 warnings.filterwarnings( "ignore" )
 
 # TF32 (tensor cores, Ampere+) trunca a 10 bits de mantisa en conv2d/depthwise_conv2d,
@@ -155,7 +161,16 @@ def build_calib_extractor( model: tf.keras.Model, blocks: list[ dict[ str, objec
         names.append( f"irb{b['idx']}_pw_bn" )
     names.append( "conv_last_relu6" )
     names.append( "gap" )
-    outputs = [ model.get_layer( n ).output for n in names ]
+
+    # Las capas _bn de QAT (HardwareOrderScaleQuant) devuelven 3 salidas
+    # (x_out, bias, eff_scale) en vez de 1 -- solo la primera (x_out) es la
+    # que hace falta calibrar aqui. Sobre el modelo estandar (no-QAT) esto
+    # no tiene efecto: .output ya es un tensor unico.
+    def primary_output( layer ):
+        out = layer.output
+        return out[ 0 ] if isinstance( out, ( list, tuple ) ) else out
+
+    outputs = [ primary_output( model.get_layer( n ) ) for n in names ]
     extractor = models.Model( model.input, outputs )
     return extractor, names
 
@@ -376,7 +391,8 @@ def main(
             ( 2, 64, 2 ), ( 2, 64, 1 ), ( 2, 64, 1 ), ( 2, 64, 1 )
         ],
         reference_ptq_accuracy: float = 0.9415,
-        batch_size: int = 32
+        batch_size: int = 32,
+        bias_enabled: bool = True
     ) -> None:
 
     max_shift = ( 2 ** shift_bits ) - 1
@@ -384,6 +400,7 @@ def main(
     print( "=" * 65 )
     print( "  SIMULADOR DE CUANTIZACION HARDWARE-EXACTA (Fase 1)" )
     print( "  MobileNetV2 + HSV, 256x256 -- vs. PTQ estandar de TFLite" )
+    print( f"  bias_enabled={bias_enabled}" )
     print( "=" * 65 )
 
     if not os.path.isdir( dataset_root ):
@@ -415,6 +432,12 @@ def main(
 
     print( "\n  Fusionando Conv+BN y cuantizando pesos/activaciones (simetrico, shift potencia-2)..." )
     params = build_all_params( model, blocks, s_image_in / 127.0, stats, max_shift )
+
+    if not bias_enabled:
+        print( "  [ ABLACION ] bias_enabled=False -- forzando bias=0 en todas las capas (simula hardware sin soporte de bias)." )
+        for p in params.values( ):
+            if isinstance( p, dict ) and "bias" in p and isinstance( p[ "bias" ], np.ndarray ):
+                p[ "bias" ] = np.zeros_like( p[ "bias" ] )
 
     export_layer_table( params, blocks, os.path.join( output_dir, "layer_quant_params.json" ) )
 
