@@ -15,6 +15,7 @@
 /architecture_pl/
 /dma
 /constraints
+/tb
 
 /tb/gen_conv3x3_tb.py
 

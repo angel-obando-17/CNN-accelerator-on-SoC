@@ -41,15 +41,13 @@ accelerator/                         # PL side — hand-written RTL, mirrored ou
         accelerator/                # cnn_accelerator testbenches
         dma/                        # DMA testbenches
     constraints/                    # timing constraints (.xdc) + timing_analysis.md
-architecture_pl/                     # Vivado project working copy (gitignored, local only — source of truth for synthesis/P&R)
-dma/                                  # root-level copy Vivado references directly by path (gitignored, local only — same reason as architecture_pl/)
-tb/, constraints/                     # root-level copies Vivado references directly by path (still tracked here too)
+architecture_pl/, dma/, constraints/, tb/  # Vivado project + root-level copies it references directly by path (all gitignored, local only)
 images/                              # diagrams / figures
 socs.md                              # SoC-level integration notes
 Bitacora.md                          # development log
 ```
 
-`accelerator/` is a read-only mirror meant for browsing the design on the remote repo — Vivado itself keeps working from `architecture_pl/` and `dma/` (both gitignored, local only) and the root-level `tb/`, `constraints/*.xdc` (still tracked, since Vivado references them by relative path). When the RTL changes, the mirror needs to be re-copied by hand.
+`accelerator/` is a read-only mirror meant for browsing the design on the remote repo — Vivado itself keeps working from `architecture_pl/`, `dma/`, `constraints/` and `tb/` (all gitignored, local only, since Vivado references them by relative path). When the RTL changes, the mirror needs to be re-copied by hand.
 
 ## Tech stack
 
