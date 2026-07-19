@@ -25,19 +25,31 @@ The model — MobileNetV2, trained and quantized to INT8 — reaches **94.14% ac
 ## Repository structure
 
 ```
-CNN/                                 # top-level CNN accelerator sources
-architecture_pl/                     # Vivado project structure (PL side)
-axi/                                 # AXI-Lite / AXI-HP interface logic
-dma/                                 # custom DMA implementation
+CNN/                                 # training / quantization pipeline
 runtime_bare_metal/                  # ARM Cortex-A9 bare-metal software
-tb/                                  # testbenches
+accelerator/                         # PL side — hand-written RTL, mirrored out of the Vivado project for readability
+    cnn_accelerator/
+        rtl/                        # MAC array, Address Generator, quant_relu, pooling, buffers
+        docs/                       # architecture.md, FSM_main_states.md, FSM_AG_states.md
+    dma/
+        rtl/                        # custom DMA engine (AXI4 master, DDR addressing)
+        docs/                       # DMA design notes (tile-wait protocol, padding, resource estimates)
+    axi/
+        rtl/                        # AXI-Lite slave
+        docs/                       # AXI-Lite/AXI-HP interconnect notes
+    tb/
+        accelerator/                # cnn_accelerator testbenches
+        dma/                        # DMA testbenches
+    constraints/                    # timing constraints (.xdc) + timing_analysis.md
+architecture_pl/                     # Vivado project working copy (gitignored, local only — source of truth for synthesis/P&R)
+dma/                                  # root-level copy Vivado references directly by path (gitignored, local only — same reason as architecture_pl/)
+tb/, constraints/                     # root-level copies Vivado references directly by path (still tracked here too)
 images/                              # diagrams / figures
-architecture.md                      # design decisions, address formulas, bug log
 socs.md                              # SoC-level integration notes
-FSM_main_states.md                   # main control FSM documentation
-FSM_AG_states.md                     # Address Generator FSM documentation
 Bitacora.md                          # development log
 ```
+
+`accelerator/` is a read-only mirror meant for browsing the design on the remote repo — Vivado itself keeps working from `architecture_pl/` and `dma/` (both gitignored, local only) and the root-level `tb/`, `constraints/*.xdc` (still tracked, since Vivado references them by relative path). When the RTL changes, the mirror needs to be re-copied by hand.
 
 ## Tech stack
 
