@@ -98,7 +98,9 @@ Aqui $y$ y $x$ son los contadores espaciales del tile actual, y $co\_counter$ in
 
 ### Que hace el bloque
 
-El [ quant_relu ] es el bloque de post-procesamiento que toma los 16 acumuladores INT32 que salen del [ Accumulator Bank ] y los convierte en 16 valores INT8 listos para ser escritos en el [ Output Buffer ]. Hace tres cosas en secuencia sobre cada uno de los 16 valores en paralelo, con una latencia de 1 ciclo de reloj.
+El [ quant_relu ] es el bloque de post-procesamiento que convierte 16 valores INT32 en 16 valores INT8 listos para ser escritos en el [ Output Buffer ]. Hace tres cosas en secuencia sobre cada uno de los 16 valores en paralelo, con una latencia de 1 ciclo de reloj.
+
+> **Nota (soporte de bias, ver `bias_support.md`):** el bloque [ Accumulator Bank ] ya no alimenta a [ quant_relu ] directamente. Entre ambos se inserto [ bias_add ], que suma un termino de bias INT32 por canal (leido de [ bias_buf ]) al acumulador crudo **antes** del shift — `acc_in` de [ quant_relu ] recibe la salida de [ bias_add ], no la del [ Accumulator Bank ]. El resto de esta seccion sigue describiendo correctamente los 3 pasos internos de [ quant_relu ], que no cambiaron.
 
 ### Por que se cuantiza primero y luego se aplica ReLU6
 

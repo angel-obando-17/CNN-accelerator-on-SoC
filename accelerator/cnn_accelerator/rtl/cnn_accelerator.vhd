@@ -22,6 +22,7 @@ entity cnn_accelerator is
         reg_pool_type      : in std_logic;
         shift              : in std_logic_vector( 4 downto 0 ); -- To quant_relu
         relu6_val          : in std_logic_vector( 7 downto 0 ); -- To quant_relu
+        mult               : in std_logic_vector( 15 downto 0 ); -- To quant_relu
         gap_shift          : in std_logic_vector( 4 downto 0 ); -- To gap_unit
         tile_ready         : in std_logic;
         -- DMA - IFBuffer.
@@ -37,6 +38,10 @@ entity cnn_accelerator is
         dma_rb_wr_en       : in std_logic;
         dma_rb_wr_addr     : in std_logic_vector( 11 downto 0 );
         dma_rb_wr_data     : in std_logic_vector( 127 downto 0 );
+        -- DMA - BiasBuffer.
+        dma_bb_wr_en       : in std_logic;
+        dma_bb_wr_addr     : in std_logic_vector(  3 downto 0 );
+        dma_bb_wr_data     : in std_logic_vector( 127 downto 0 );
         -- DMA - OFBuffer.
         dma_ob_rd_en       : in std_logic;
         dma_ob_rd_addr     : in std_logic_vector( 11 downto 0 );
@@ -91,7 +96,12 @@ architecture Behavioral of cnn_accelerator is
     signal acc_bank_in        : reg_array( 0 to NUM_MACS - 1 );
     signal acc_bank_out       : reg_array( 0 to NUM_MACS - 1 );
     signal acc_int32          : int32_array( 0 to NUM_MACS - 1 );
-    
+
+    -- BiasBuffer + BiasAdd.
+    signal bias_data_out      : std_logic_vector( 511 downto 0 );
+    signal bias_arr           : int32_array( 0 to NUM_MACS - 1 );
+    signal bias_sum           : int32_array( 0 to NUM_MACS - 1 );
+
     -- QuantReLU6.
     signal quant_data_out     : int8_array( 0 to NUM_MACS - 1 );
     signal quant_valid        : std_logic;
@@ -118,6 +128,11 @@ architecture Behavioral of cnn_accelerator is
     signal ofbuf_data_in      : std_logic_vector( 127 downto 0 );
     signal ofbuf_wr_addr_reg  : std_logic_vector( 11 downto 0 );
     signal quant_valid_prev   : std_logic;
+
+    -- PoolUnit: co_counter registrado ( fix ), mismo punto de captura que
+    -- ofbuf_wr_addr_reg. ag_co_counter en vivo ya avanzo al SIGUIENTE grupo
+    -- para cuando el dato del grupo actual llega a pool_act/valid_in.
+    signal co_counter_reg     : std_logic_vector( 1 downto 0 ) := ( others => '0' );
         
 begin
 
@@ -139,6 +154,10 @@ begin
     
     gen_res: for i in 0 to NUM_MACS - 1 generate
         res_arr( i ) <= signed( res_data_out( ( i * 8 ) + 7 downto ( i * 8 ) ) );
+    end generate;
+
+    gen_bias: for i in 0 to NUM_MACS - 1 generate
+        bias_arr( i ) <= signed( bias_data_out( ( i * 32 ) + 31 downto ( i * 32 ) ) );
     end generate;
     
     gen_apack: for i in 0 to NUM_MACS - 1 generate
@@ -165,6 +184,7 @@ begin
             quant_valid_prev  <= quant_valid;
             if( sig_acc_bank_en = '1' ) then
                 ofbuf_wr_addr_reg <= ag_addr_out;
+                co_counter_reg    <= ag_co_counter;
             end if;
         end if;
     end process;
@@ -293,6 +313,24 @@ begin
             data_out        => acc_bank_out
         );
         
+    inst_bias_buf : entity work.bias_buf
+        port map(
+            clk             => clk,
+            r_enable        => sig_acc_bank_en,
+            w_enable        => dma_bb_wr_en,
+            wr_addr         => dma_bb_wr_addr,
+            rd_addr         => ag_co_counter,
+            data_in         => dma_bb_wr_data,
+            data_out        => bias_data_out
+        );
+
+    inst_bias_add : entity work.bias_add
+        port map(
+            data_a          => acc_int32,
+            data_b          => bias_arr,
+            data_out        => bias_sum
+        );
+
     inst_quant_relu : entity work.quant_relu
         port map(
             clk             => clk,
@@ -301,11 +339,12 @@ begin
             relu_en         => sig_relu_en,
             shift           => unsigned( shift ),
             relu6_val       => signed( relu6_val ),
-            acc_in          => acc_int32,
+            mult            => unsigned( mult ),
+            acc_in          => bias_sum,
             data_out        => quant_data_out,
             valid_out       => quant_valid
-        );    
-        
+        );
+
     inst_res_buf : entity work.residual_buf
         port map(
             clk             => clk,
@@ -331,7 +370,7 @@ begin
             pool_type_sel   => sig_pool_type_sel,
             valid_in        => quant_valid,
             data_in         => quant_packed,
-            co_counter      => ag_co_counter,
+            co_counter      => co_counter_reg,
             max_co          => max_co,
             x_counter       => ag_x_counter,
             y_counter       => ag_y_counter,

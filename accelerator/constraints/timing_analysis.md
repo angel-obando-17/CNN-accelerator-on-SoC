@@ -250,3 +250,62 @@ ruta cierra timing limpio o no.**
 ## Confirmación final (2026-07-14)
 
 Con el Block Design completo implementado de verdad (ya no out-of-context), el timing a 70MHz se confirma limpio: `WNS=+0.187ns`, `WHS=+0.042ns`, `WPWS=+6.012ns`, cero endpoints fallando en cualquiera de los tres. **Esto cierra el análisis de timing definitivamente** — la frecuencia de `FCLK_CLK0` queda en 70MHz, confirmada tanto en scratch (out-of-context) como en el proyecto real.
+
+## Re-verificación post-bias (2026-08-04) — timing SIGUE cerrando, pero se encontró una regresión seria de recursos
+
+Con el soporte de bias completo integrado (ver `bias_support.md`) y sin re-sintetizar desde el 2026-07-14, correspondía re-confirmar timing — el datapath POST cambió (`bias_add` entre `accumulator_bank` y `quant_relu`) y además se aplicaron los fixes de `co_counter_reg`/`acc_clear` en `max_pool.vhd`/`pool_unit.vhd` sin volver a sintetizar nunca.
+
+Corrida out-of-context (mismo método de scratch, `cnn_top` completo, part `xc7z020clg400-2`, constraint sin cambios de `cnn_top_clock.xdc` a 70MHz):
+
+| Fecha | Periodo constreñido | WNS (post-ruteo) | Camino crítico | Notas |
+|---|---|---|---|---|
+| **2026-08-04** | **14.286 ns (70 MHz)** | **+0.190 ns** | `inst_axi_slave/r04_mode_reg → sig_kx_reg[1]_LDC → inst_addr_generator (addr_in) → inst_if_buf/buf_b (RAMB36 ADDR)`, 15 niveles lógicos | **Pasa, con margen casi idéntico al de antes del bias (+0.187ns → +0.190ns).** El camino crítico CAMBIÓ de `ddr_addr_gen.vhd` (el de siempre) a uno nuevo por `addr_generator.vhd`→IFBuffer — probablemente placement distinto por el crecimiento del diseño, no una regresión real de ese camino específico. |
+
+**Timing en sí: cerrado, sin drama.** Pero la utilización de recursos post-síntesis dio una sorpresa: LUT subió de ~17.5% a **35.65%**, y FF de ~3.4% a **34.86%** — un salto que ni el bias ni los fixes de `co_counter_reg` explican por su tamaño real (unos pocos cientos de LUTs/FFs esperados, no ~15000/~33000 nuevos).
+
+### Causa raíz encontrada: `acc_clear` en `max_pool.vhd` rompe la inferencia de BRAM de `row_buf_ram`
+
+`report_utilization -hierarchical` aisló el problema a un solo bloque: `inst_pool_unit/mp_inst` (`max_pool.vhd`) solo, **9756 LUTs y 33549 FFs** — el resto del diseño (incluyendo `bias_add`/`bias_buf`, `gap_unit`, todo el DMA) está en rangos normales.
+
+Causa: el fix de `acc_clear` del 2026-07-30 (ver `bias_support.md`, sección del bug de `co_counter`) agregó esta rama al proceso síncrono de `max_pool.vhd`:
+
+```vhdl
+if( acc_clear = '1' ) then
+    row_buf_ram  <= ( others => ( others => '0' ) );   -- limpia las 256 posiciones de un tirón
+```
+
+`row_buf_ram` es un arreglo de 256×128 bits que antes inferá limpio como 2 tiles de `RAMB36`. El patrón estándar de inferencia de BRAM (simple dual-port) en Vivado solo tolera escrituras indexadas de a una posición (`row_buf_ram(addr) <= dato`) — en cuanto aparece una rama que asigna el arreglo COMPLETO de un tirón (como este clear masivo), Vivado ya no puede mapearlo a un primitivo de memoria y cae a implementarlo como registros individuales distribuidos: 256 × 128 = 32768 flip-flops, más la lógica de selección/mux asociada (de ahí los ~9756 LUTs extra). Esto es intrínseco a cómo Vivado infiere BRAM, no un bug de la herramienta ni algo que dependiera de esta corrida en particular — iba a pasar la primera vez que alguien sintetizara después del fix de `acc_clear`, y nadie lo había hecho hasta hoy.
+
+**Por qué nadie lo vio antes**: el fix se verificó en ModelSim (`tb_cnn_top_hardcore.vhd`, Caso F/L), que simula la lógica correctamente sin importar cómo se mapea a hardware real — un simulador no tiene forma de detectar un problema de inferencia de memoria. Solo aparece al sintetizar, y esta es la primera síntesis desde ese fix.
+
+**Impacto real**: el diseño sigue cabiendo (35.65%/34.86% < 100%) y el timing sigue cerrando a 70MHz, así que no bloquea nada hoy. Pero es un desperdicio severo de recursos en el chip más ajustado de la familia (BRAM ya al 73.57%, el recurso más disputado del proyecto) y reduce mucho el margen para crecimiento futuro. **No corregido en esta sesión** — es un hallazgo de síntesis, no un bug funcional, y el fix real (reestructurar cómo se limpia `row_buf_ram` sin romper la plantilla de inferencia de BRAM — por ejemplo, un clear secuencial dirigido por contador en vez de un clear de todo el arreglo en 1 ciclo, o repensar si `row_buf_ram` necesita limpiarse en absoluto dado el patrón de escritura-antes-de-lectura dentro de cada capa) requiere diseño de RTL, pendiente de que Angel lo revise y decida el approach.
+
+**Otros números de esta corrida** (para referencia): `bias_add` — 1491 LUT, 0 FF (puramente combinacional, esperado). `bias_buf` — 0 LUT, 8×`RAMB36` (más de lo que parece "debería" costar una memoria de 16×128 bits, pero es el costo esperado de leer 4 direcciones simultáneas distintas en el mismo ciclo — el diseño replica el almacenamiento por puerto de lectura). BRAM total: 73.57% (102 `RAMB36` + 2 `RAMB18`) — sube desde 69.29% por el neto de +8 tiles de `bias_buf` y -2 tiles que `row_buf_ram` dejó de usar (ahora en FFs). DSP: 20/220 (9.09%), sin cambios.
+
+## Cierre — multiplicador de re-cuantización + fix de `max_pool.vhd` + fix de `mac_en`/`POST`: 70MHz CIERRA (2026-08-04)
+
+Después de: (1) el fix de una línea en `max_pool.vhd` (quitar el clear de `row_buf_ram`, ver `bias_support.md`), (2) el multiplicador de re-cuantización con pipeline de 2 ciclos en `quant_relu.vhd`, y (3) el fix de `mac_en<=mac_valid` también en `POST` de `fsm_cnn_acc.vhd` (los tres detallados en `requantization_analysis.md`) — se corrió el análisis de timing completo una vez más, mismo método de siempre (out-of-context, `cnn_top`, `xc7z020clg400-2`, `cnn_top_clock.xdc` sin cambios a 70MHz/14.286ns):
+
+| Fecha | Periodo constreñido | WNS (post-ruteo) | Camino crítico | Notas |
+|---|---|---|---|---|
+| **2026-08-04** | **14.286 ns (70 MHz)** | **+0.412 ns** | `axi_slave/r04_mode_reg → sig_kx_reg[1]_LDC → addr_generator (addr_in) → IFBuffer (RAMB36 ADDR)` — el de siempre, NO el multiplicador | **PASA, con MEJOR margen que el original pre-bias (+0.187/+0.190ns → +0.412ns).** El pipeline de `quant_relu.vhd` sacó al multiplicador del camino crítico por completo — ya no aparece ni entre los peores caminos. 0 endpoints fallando de 17354 (antes del pipeline: 302 fallando). |
+
+**Recursos de esta corrida**: LUT 10303 (19.37%), FF 4453 (4.19%), BRAM 105 tiles (75.00%), DSP 52 (23.64% — 16 MAC array + 4 DMA + 32 del multiplicador de re-cuantización). Todo con margen cómodo salvo BRAM, que sigue siendo el recurso más disputado del proyecto pero lejos de un límite real.
+
+**Esto cierra el ciclo de trabajo completo** iniciado con el soporte de bias: bias (orden correcto) + multiplicador de re-cuantización (reemplaza el shift-only, el cuello de botella real de accuracy) + los 2 bugs de RTL encontrados en el proceso (`row_buf_ram`/BRAM, `mac_en`/`POST`) — todos verificados en simulación (0 fallos, testbenches hardcore + bias) y ahora en timing real. Pendiente: copiar todo al espejo `accelerator/`, avisar a PS de los offsets nuevos (`0x3C`=REG_MULT, `0x4C`/`0x50` de bias), avisar a CNN_training para que actualice el simulador con el multiplicador real y vuelva a medir accuracy contra el modelo de producción.
+
+### Headroom explorado — 75MHz también cierra (2026-08-04, no aplicado)
+
+Con el margen de +0.412ns a 70MHz, se probó qué tan alto se podría subir. Un punto adicional real (no solo estimación lineal):
+
+| Fecha | Periodo constreñido | WNS (post-ruteo) | Camino crítico | Notas |
+|---|---|---|---|---|
+| 2026-08-04 | 13.333 ns (75 MHz) | **+0.232 ns** | mismo (`axi_slave→addr_generator→IFBuffer`) | **Pasa.** Fmax real estimado con este punto + el de 70MHz: ~76-77MHz. |
+
+**No aplicado** — `FCLK_CLK0` sigue en 70MHz, el `.xsa` exportado y la documentación de PS siguen asumiendo 70MHz. Este resultado queda como margen de rendimiento disponible para una futura optimización, no como un cambio decidido. Si se retoma, hay que re-exportar el Block Design/`.xsa` con el nuevo `FCLK_CLK0` y avisar a la sesión PS.
+
+## CONFIRMACIÓN FINAL REAL (2026-08-05) — Angel corrió Implementation sobre el proyecto real completo
+
+Corrida por Angel directamente en Vivado (`system_bd_wrapper` como top, no `cnn_top` solo — con `cnn_top` solo como top la implementación falla porque le falta toda la infraestructura de reloj/reset del PS7, mismo motivo por el que las corridas de scratch de esta sesión necesitaban forzar un reloj falso a mano). Diseño real completo: PS7 + Processor System Reset + 4×AXI Protocol Converter + `cnn_top` (con bias + multiplicador de re-cuantización + los 2 fixes de RTL de esta sesión).
+
+**Resultado a 70MHz: `WNS=+0.353ns`, `WHS=+0.044ns`, 0 endpoints fallando de 24024.** Un poco menos de margen que la estimación out-of-context (+0.412ns) — mismo patrón ya visto en 2026-07-14 (lógica extra de PS7/resets/converters reduce el margen un poco frente al estimado de scratch, pero se mantiene positivo). **Esto cierra el análisis de timing definitivamente para esta ronda de cambios** — confirmado tanto out-of-context (scratch) como en el proyecto real, igual que se hizo la primera vez. Con esto, el proyecto queda listo para generar bitstream y re-exportar el `.xsa`.

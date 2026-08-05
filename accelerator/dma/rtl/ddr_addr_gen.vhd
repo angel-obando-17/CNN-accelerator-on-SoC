@@ -17,14 +17,16 @@ entity ddr_addr_gen is
         addr_out     : in std_logic_vector( 31 downto 0 );
         addr_w       : in std_logic_vector( 31 downto 0 );
         addr_res     : in std_logic_vector( 31 downto 0 );
+        addr_bias    : in std_logic_vector( 31 downto 0 );
         weight_words : in std_logic_vector(  7 downto 0 );
+        bias_words   : in std_logic_vector(  7 downto 0 );
 
         -- Actual State from DMA_FSM.
         tile_x        : in std_logic_vector(  1 downto 0 );
         tile_y        : in std_logic_vector(  5 downto 0 );
         r_local       : in std_logic_vector(  3 downto 0 );
-            -- 00 = IFM, 01 = OFM, 10 = Weights, 11 = Residual.
-        transfer_type : in std_logic_vector(  1 downto 0 ); 
+            -- 000 = IFM, 001 = OFM, 010 = Weights, 011 = Residual, 100 = Bias.
+        transfer_type : in std_logic_vector(  2 downto 0 );
 
         -- Outputs.
         ddr_addr    : out std_logic_vector( 31 downto 0 );
@@ -51,13 +53,15 @@ begin
         num_tile_y, 
         cin, 
         cout,
-        pool_en, 
-        addr_in, 
-        addr_out, 
-        addr_w, 
-        addr_res, 
+        pool_en,
+        addr_in,
+        addr_out,
+        addr_w,
+        addr_res,
+        addr_bias,
         weight_words,
-        tile_x, 
+        bias_words,
+        tile_x,
         tile_y, 
         r_local, 
         transfer_type
@@ -149,7 +153,7 @@ begin
 
         case transfer_type is
             --IFB.
-            when "00" => 
+            when "000" =>
                 row_words_padded := resize( ( v_tile_w + 2 ) * cin_groups, 16 );
 
                 if( ( v_r_local = 0 and is_top_edge = '1' ) or
@@ -197,14 +201,14 @@ begin
                 end if;
 
             -- OFM / Residual.
-            when "01" | "11" => 
+            when "001" | "011" =>
                 row_words_out  := resize( tile_w_out * cout_groups, 16 );
                 r_global_out   := resize( v_tile_y * tile_h_out, 16 ) + v_r_local;
                 row_stride_out := resize( img_w_out * unsigned( cout ), 16 );
                 term1 := resize( r_global_out * row_stride_out, 32 );
                 term2 := resize( resize( v_tile_x * tile_w_out, 16 ) * unsigned( cout ), 32 );
 
-                if( transfer_type = "01" ) then
+                if( transfer_type = "001" ) then
                     ddr_addr <= std_logic_vector( unsigned( addr_out ) + term1 + term2 );
                 else
                     ddr_addr <= std_logic_vector( unsigned( addr_res ) + term1 + term2 );
@@ -213,8 +217,14 @@ begin
                 burst_words <= std_logic_vector( resize( row_words_out, 10 ) );
                 local_addr  <= std_logic_vector( resize( v_r_local * row_words_out, 13 ) );
 
+            -- Bias.
+            when "100" =>
+                ddr_addr    <= addr_bias;
+                burst_words <= "00" & bias_words;
+                local_addr  <= ( others => '0' );
+
             -- Weights.
-            when others => 
+            when others =>
                 ddr_addr    <= addr_w;
                 burst_words <= "00" & weight_words;
                 local_addr  <= ( others => '0' );

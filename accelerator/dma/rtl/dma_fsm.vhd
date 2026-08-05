@@ -21,7 +21,7 @@ entity dma_fsm is
         dma_done     : out std_logic;
 
         -- To ddr_addr_gen.
-        transfer_type : out std_logic_vector(  1 downto 0 );
+        transfer_type : out std_logic_vector(  2 downto 0 );
         gen_tile_x    : out std_logic_vector(  1 downto 0 );
         gen_tile_y    : out std_logic_vector(  5 downto 0 );
         gen_r_local   : out std_logic_vector(  3 downto 0 );
@@ -52,7 +52,7 @@ entity dma_fsm is
         zero_wr_addr     : out std_logic_vector( 12 downto 0 );
 
         -- Destination / Origin Selector.
-        target_sel : out std_logic_vector(  1 downto 0 );
+        target_sel : out std_logic_vector(  2 downto 0 );
 
         -- To accelerator.
         buf_sel     : out std_logic;
@@ -64,9 +64,10 @@ entity dma_fsm is
 end dma_fsm;
 
 architecture Behavioral of dma_fsm is
-    type state_type is ( IDLE, 
-                         LOAD_WEIGHTS, 
-                         IFM_MAIN, 
+    type state_type is ( IDLE,
+                         LOAD_WEIGHTS,
+                         LOAD_BIAS,
+                         IFM_MAIN,
                          IFM_READ, 
                          IFM_LEFT, 
                          IFM_RIGHT, 
@@ -248,7 +249,7 @@ begin
     begin
         -- Default Values..
         dma_done         <= '0';
-        transfer_type    <= "00";
+        transfer_type    <= "000";
         rd_start         <= '0';
         wr_start         <= '0';
         gap_flush_active <= '0';
@@ -257,7 +258,7 @@ begin
         zero_fill_active <= '0';
         zero_wr_en       <= '0';
         zero_wr_addr     <= std_logic_vector( reg_zf_addr );
-        target_sel       <= "00";
+        target_sel       <= "000";
         buf_sel          <= '0';
         accel_start      <= '0';
         tile_ready       <= '0';
@@ -276,18 +277,28 @@ begin
                 end if;
 
             when LOAD_WEIGHTS =>
-                transfer_type <= "10";
-                target_sel    <= "01"; -- WeightBuffer.
+                transfer_type <= "010";
+                target_sel    <= "001"; -- WeightBuffer.
                 if( rd_done = '1' ) then
-                    next_state <= IFM_MAIN;
+                    next_state <= LOAD_BIAS;
                 else
                     rd_start   <= '1';
                     next_state <= LOAD_WEIGHTS;
                 end if;
 
+            when LOAD_BIAS =>
+                transfer_type <= "100";
+                target_sel    <= "100"; -- BiasBuffer.
+                if( rd_done = '1' ) then
+                    next_state <= IFM_MAIN;
+                else
+                    rd_start   <= '1';
+                    next_state <= LOAD_BIAS;
+                end if;
+
             when IFM_MAIN =>
-                transfer_type <= "00";
-                target_sel    <= "00"; -- IFBuffer.
+                transfer_type <= "000";
+                target_sel    <= "000"; -- IFBuffer.
                 buf_sel       <= '1';
                 if( skip_ddr = '1' ) then
                     next_state <= ZERO_FILL;
@@ -296,8 +307,8 @@ begin
                 end if;
 
             when IFM_READ =>
-                transfer_type <= "00";
-                target_sel    <= "00";
+                transfer_type <= "000";
+                target_sel    <= "000";
                 buf_sel       <= '1';
                 if( rd_done = '1' ) then
                     next_state <= IFM_LEFT;
@@ -307,8 +318,8 @@ begin
                 end if;
 
             when IFM_LEFT =>
-                transfer_type <= "00";
-                target_sel    <= "00";
+                transfer_type <= "000";
+                target_sel    <= "000";
                 buf_sel       <= '1';
                 if( left_zero_en = '1' ) then
                     next_state <= ZERO_FILL;
@@ -317,8 +328,8 @@ begin
                 end if;
 
             when IFM_RIGHT =>
-                transfer_type <= "00";
-                target_sel    <= "00";
+                transfer_type <= "000";
+                target_sel    <= "000";
                 buf_sel       <= '1';
                 if( right_zero_en = '1' ) then
                     next_state <= ZERO_FILL;
@@ -327,7 +338,7 @@ begin
                 end if;
 
             when ZERO_FILL =>
-                target_sel       <= "00"; -- IFBuffer.
+                target_sel       <= "000"; -- IFBuffer.
                 buf_sel          <= '1';
                 zero_fill_active <= '1';
                 if( reg_zf_words_left = 0 ) then
@@ -338,7 +349,7 @@ begin
                 end if;
 
             when IFM_NEXT =>
-                target_sel <= "00";
+                target_sel <= "000";
                 buf_sel    <= '1';
                 if( reg_r_local < unsigned( tile_h ) + 1 ) then
                     next_state <= IFM_MAIN;
@@ -349,8 +360,8 @@ begin
                 end if;
 
             when RES_READ =>
-                transfer_type <= "11";
-                target_sel    <= "10"; -- ResidualBuffer.
+                transfer_type <= "011";
+                target_sel    <= "010"; -- ResidualBuffer.
                 if( rd_done = '1' ) then
                     next_state <= RES_NEXT;
                 else
@@ -359,7 +370,7 @@ begin
                 end if;
 
             when RES_NEXT =>
-                target_sel <= "10";
+                target_sel <= "010";
                 if( ( pool_en = '1' and reg_r_local < resize( shift_right( unsigned( tile_h ), 1 ), 4 ) - 1 ) or
                     ( pool_en = '0' and reg_r_local < unsigned( tile_h ) - 1 ) ) then
                     next_state <= RES_READ;
@@ -399,8 +410,8 @@ begin
                 end if;
 
             when OFM_WRITE =>
-                transfer_type <= "01";
-                target_sel    <= "11"; -- OFBuffer.
+                transfer_type <= "001";
+                target_sel    <= "011"; -- OFBuffer.
                 if( wr_done = '1' ) then
                     next_state <= OFM_NEXT;
                 else
@@ -409,7 +420,7 @@ begin
                 end if;
 
             when OFM_NEXT =>
-                target_sel <= "11";
+                target_sel <= "011";
                 if( ( pool_en = '1' and reg_r_local < resize( shift_right( unsigned( tile_h ), 1 ), 4 ) - 1 ) or
                     ( pool_en = '0' and reg_r_local < unsigned( tile_h ) - 1 ) ) then
                     next_state <= OFM_WRITE;
@@ -420,8 +431,8 @@ begin
                 end if;
 
             when GAP_FLUSH =>
-                transfer_type    <= "01"; -- OFB.
-                target_sel       <= "11";
+                transfer_type    <= "001"; -- OFB.
+                target_sel       <= "011";
                 gap_flush_active <= '1';
                 gap_ddr_addr     <= addr_out;
                 gap_burst_words  <= std_logic_vector( resize( unsigned( cout( 6 downto 4 ) ), 10 ) );

@@ -70,6 +70,9 @@ entity dma_engine is
         dma_rb_wr_en   : out std_logic;
         dma_rb_wr_addr : out std_logic_vector( 11 downto 0 );
         dma_rb_wr_data : out std_logic_vector( 127 downto 0 );
+        dma_bb_wr_en   : out std_logic;
+        dma_bb_wr_addr : out std_logic_vector(  3 downto 0 );
+        dma_bb_wr_data : out std_logic_vector( 127 downto 0 );
         dma_ob_rd_en   : out std_logic;
         dma_ob_rd_addr : out std_logic_vector( 11 downto 0 );
         dma_ob_rd_data : in  std_logic_vector( 127 downto 0 );
@@ -105,10 +108,12 @@ architecture Behavioral of dma_engine is
     signal rb_addr_res     : std_logic_vector( 31 downto 0 );
     signal rb_pool_en      : std_logic;
     signal rb_pool_type    : std_logic;
+    signal rb_bias_words   : std_logic_vector(  7 downto 0 );
+    signal rb_addr_bias    : std_logic_vector( 31 downto 0 );
     signal rb_done         : std_logic;
 
     -- dma_fsm <-> ddr_addr_gen.
-    signal fsm_transfer_type   : std_logic_vector(  1 downto 0 );
+    signal fsm_transfer_type   : std_logic_vector(  2 downto 0 );
     signal fsm_tile_x          : std_logic_vector(  1 downto 0 );
     signal fsm_tile_y          : std_logic_vector(  5 downto 0 );
     signal fsm_r_local         : std_logic_vector(  3 downto 0 );
@@ -142,7 +147,7 @@ architecture Behavioral of dma_engine is
     signal fsm_zero_fill_active : std_logic;
     signal fsm_zero_wr_en       : std_logic;
     signal fsm_zero_wr_addr     : std_logic_vector( 12 downto 0 );
-    signal fsm_target_sel       : std_logic_vector(  1 downto 0 );
+    signal fsm_target_sel       : std_logic_vector(  2 downto 0 );
 
     -- Combined local write bus.
     signal comb_wr_en   : std_logic;
@@ -195,6 +200,8 @@ begin
             dma_addr_res     => rb_addr_res,
             dma_pool_en      => rb_pool_en,
             dma_pool_type    => rb_pool_type,
+            dma_bias_words   => rb_bias_words,
+            dma_addr_bias    => rb_addr_bias,
             dma_irq          => dma_done
         );
 
@@ -212,7 +219,9 @@ begin
             addr_out        => rb_addr_out,
             addr_w          => rb_addr_w,
             addr_res        => rb_addr_res,
+            addr_bias       => rb_addr_bias,
             weight_words    => rb_weight_words,
+            bias_words      => rb_bias_words,
             tile_x          => fsm_tile_x,
             tile_y          => fsm_tile_y,
             r_local         => fsm_r_local,
@@ -342,16 +351,20 @@ begin
     comb_wr_data <= ( others => '0' ) when fsm_zero_fill_active = '1' else rd_local_wr_data;
 
     -- Routing of the combined bus to the destination buffer.
-    dma_if_wr_en   <= comb_wr_en when fsm_target_sel = "00" else '0';
+    dma_if_wr_en   <= comb_wr_en when fsm_target_sel = "000" else '0';
     dma_if_wr_addr <= comb_wr_addr;
     dma_if_wr_data <= comb_wr_data;
 
-    dma_wb_wr_en   <= comb_wr_en when fsm_target_sel = "01" else '0';
+    dma_wb_wr_en   <= comb_wr_en when fsm_target_sel = "001" else '0';
     dma_wb_wr_addr <= comb_wr_addr( 7 downto 0 );
     dma_wb_wr_data <= comb_wr_data;
 
-    dma_rb_wr_en   <= comb_wr_en when fsm_target_sel = "10" else '0';
+    dma_rb_wr_en   <= comb_wr_en when fsm_target_sel = "010" else '0';
     dma_rb_wr_addr <= comb_wr_addr( 11 downto 0 );
     dma_rb_wr_data <= comb_wr_data;
+
+    dma_bb_wr_en   <= comb_wr_en when fsm_target_sel = "100" else '0';
+    dma_bb_wr_addr <= comb_wr_addr( 3 downto 0 );
+    dma_bb_wr_data <= comb_wr_data;
 
 end Behavioral;

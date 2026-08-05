@@ -6,6 +6,7 @@ use work.cnn_pkg.all;
 entity max_pool is
     port(
         clk        : in  std_logic;
+        acc_clear  : in  std_logic;
         pool_act   : in  std_logic;
         valid_in   : in  std_logic;
         data_in    : in  std_logic_vector( 127 downto 0 );
@@ -21,10 +22,9 @@ entity max_pool is
 end max_pool;
 
 architecture Behavioral of max_pool is
-
     type reg_bank_t is array( 0 to 3 )   of std_logic_vector( 127 downto 0 );
     type row_buf_t  is array( 0 to 255 ) of std_logic_vector( 127 downto 0 );
-    
+
     signal x_even_reg   : reg_bank_t := ( others => ( others => '0' ) );
     signal row_buf_ram  : row_buf_t;
     signal rb_rd_data   : std_logic_vector( 127 downto 0 );
@@ -57,10 +57,10 @@ architecture Behavioral of max_pool is
 begin
     
     h_max <= max_word( data_in, x_even_reg( to_integer( unsigned( co_counter ) ) ) );
-    
+   
     process( clk )
-        variable rb_addr    : unsigned(  7 downto 0 );   -- dirección del row buffer.
-        variable pool_addr  : unsigned( 11 downto 0 );   -- dirección de salida al OFBuffer.
+        variable rb_addr    : unsigned(  7 downto 0 );   -- row buffer address.
+        variable pool_addr  : unsigned( 11 downto 0 );   -- out address for OFBuffer.
         variable tile_w_h   : unsigned(  6 downto 0 );   -- TILE_W / 2.
         variable num_co_v   : unsigned(  2 downto 0 );   -- max_co + 1.
         variable y_out      : unsigned(  2 downto 0 );   -- y_counter >> 1.
@@ -68,23 +68,31 @@ begin
     begin
         if( rising_edge( clk ) ) then
             wr_en_pipe <= '0';
-            num_co_v := resize( unsigned( max_co ), 3 ) + 1;
-            tile_w_h := resize( unsigned( max_x( 6 downto 1 ) ), 7 ) + 1;
-            x_out    := unsigned( x_counter( 6 downto 1 ) );
-            y_out    := resize( unsigned( y_counter( 2 downto 1 ) ), 3 );
-            
-            rb_addr  := resize( x_out * resize( num_co_v, 6 ), 8 ) + resize( unsigned( co_counter ), 8 );
-            pool_addr := resize( resize( y_out * tile_w_h, 10 ) * resize( num_co_v, 10 ), 12 ) + resize( x_out * resize( num_co_v, 6 ), 12 ) + resize( unsigned( co_counter ), 12 );
-            if( pool_act = '1' and valid_in = '1' ) then 
-                -- x par: guardar píxel en el banco de registros
+            num_co_v  := resize( unsigned( max_co ), 3 ) + 1;
+            tile_w_h  := resize( unsigned( max_x( 6 downto 1 ) ), 7 ) + 1;
+            x_out     := unsigned( x_counter( 6 downto 1 ) );
+            y_out     := resize( unsigned( y_counter( 2 downto 1 ) ), 3 );
+
+            rb_addr   := resize( x_out * resize( num_co_v, 6 ), 8 ) + resize( unsigned( co_counter ), 8 );
+            pool_addr := resize( resize( y_out * tile_w_h, 10 ) * resize( num_co_v, 10 ), 12 ) + 
+                         resize( x_out * resize( num_co_v, 6 ), 12 ) + resize( unsigned( co_counter ), 12 );
+
+            if( acc_clear = '1' ) then
+                -- Clears all persistent state at the start of each layer.
+                x_even_reg   <= ( others => ( others => '0' ) );
+                rb_rd_data   <= ( others => '0' );
+                h_max_reg    <= ( others => '0' );
+                wr_addr_pipe <= ( others => '0' );
+            elsif( pool_act = '1' and valid_in = '1' ) then
+                -- x even: save pixel in register bank.
                 if( x_counter( 0 ) = '0' ) then
                 x_even_reg( to_integer( unsigned( co_counter ) ) ) <= data_in;
-                -- x impar: comparar con el par y actuar según y
+                -- x odd: compare with the peer and act accordingly to y.
                 elsif( x_counter( 0 ) = '1' ) then
-                    -- y par: escribir máximo horizontal al row buffer
+                    -- y even: write the maximum horizontal amount to the row buffer.
                     if( y_counter( 0 ) = '0' ) then
                       row_buf_ram( to_integer( rb_addr ) ) <= h_max;
-                    -- y impar: leer row buffer + cargar pipeline
+                    -- y odd: read row buffer + load pipeline
                     else
                       rb_rd_data   <= row_buf_ram( to_integer( rb_addr ) );
                       h_max_reg    <= h_max;

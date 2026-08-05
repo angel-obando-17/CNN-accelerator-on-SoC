@@ -113,6 +113,7 @@ architecture Behavioral of cnn_top is
     signal pool_type_axi_to_cnn  : std_logic;
     signal shift_axi_to_cnn      : std_logic_vector( 4 downto 0 );
     signal relu6_axi_to_cnn      : std_logic_vector( 7 downto 0 );
+    signal mult_axi_to_cnn       : std_logic_vector( 15 downto 0 );
     signal gap_shift_axi_to_cnn  : std_logic_vector( 4 downto 0 );
     
     -- CNN Accelerator to Axi Slave.
@@ -130,6 +131,9 @@ architecture Behavioral of cnn_top is
     signal rb_wr_en_dma_to_cnn   : std_logic;
     signal rb_wr_addr_dma_to_cnn : std_logic_vector(  11 downto 0 );
     signal rb_wr_data_dma_to_cnn : std_logic_vector( 127 downto 0 );
+    signal bb_wr_en_dma_to_cnn   : std_logic;
+    signal bb_wr_addr_dma_to_cnn : std_logic_vector(   3 downto 0 );
+    signal bb_wr_data_dma_to_cnn : std_logic_vector( 127 downto 0 );
     signal ob_rd_en_dma_to_cnn   : std_logic;
     signal ob_rd_addr_dma_to_cnn : std_logic_vector(  11 downto 0 );
     signal ob_rd_data_dma_to_cnn : std_logic_vector( 127 downto 0 ); 
@@ -160,6 +164,7 @@ begin
             reg_pool_type      => pool_type_axi_to_cnn,
             shift              => shift_axi_to_cnn,
             relu6_val          => relu6_axi_to_cnn,
+            mult               => mult_axi_to_cnn,
             gap_shift          => gap_shift_axi_to_cnn,
             tile_ready         => tile_ready_dma_to_cnn,
             buf_sel            => buf_sel_dma_to_cnn,
@@ -172,6 +177,9 @@ begin
             dma_rb_wr_en       => rb_wr_en_dma_to_cnn,
             dma_rb_wr_addr     => rb_wr_addr_dma_to_cnn,
             dma_rb_wr_data     => rb_wr_data_dma_to_cnn,
+            dma_bb_wr_en       => bb_wr_en_dma_to_cnn,
+            dma_bb_wr_addr     => bb_wr_addr_dma_to_cnn,
+            dma_bb_wr_data     => bb_wr_data_dma_to_cnn,
             dma_ob_rd_en       => ob_rd_en_dma_to_cnn,
             dma_ob_rd_addr     => ob_rd_addr_dma_to_cnn,
             dma_ob_rd_data     => ob_rd_data_dma_to_cnn,
@@ -216,6 +224,7 @@ begin
             reg_pool_type    => pool_type_axi_to_cnn,
             shift            => shift_axi_to_cnn,
             relu6_val        => relu6_axi_to_cnn,
+            mult             => mult_axi_to_cnn,
             gap_shift        => gap_shift_axi_to_cnn
         );
     
@@ -279,6 +288,9 @@ begin
             dma_rb_wr_en    => rb_wr_en_dma_to_cnn,
             dma_rb_wr_addr  => rb_wr_addr_dma_to_cnn,
             dma_rb_wr_data  => rb_wr_data_dma_to_cnn,
+            dma_bb_wr_en    => bb_wr_en_dma_to_cnn,
+            dma_bb_wr_addr  => bb_wr_addr_dma_to_cnn,
+            dma_bb_wr_data  => bb_wr_data_dma_to_cnn,
             dma_ob_rd_en    => ob_rd_en_dma_to_cnn,
             dma_ob_rd_addr  => ob_rd_addr_dma_to_cnn,
             dma_ob_rd_data  => ob_rd_data_dma_to_cnn,

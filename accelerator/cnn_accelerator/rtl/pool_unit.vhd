@@ -39,6 +39,7 @@ begin
     mp_inst : entity work.max_pool
         port map(
             clk        => clk,
+            acc_clear  => acc_clear,
             pool_act   => pool_act,
             valid_in   => valid_in,
             data_in    => data_in,

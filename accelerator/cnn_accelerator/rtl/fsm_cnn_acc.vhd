@@ -132,6 +132,7 @@ begin
                 relu_en  <= '1';
                 quant_en <= '1';
                 addr_en  <= '1';
+                mac_en   <= mac_valid;
                 add_en   <= reg_has_residual;
                 addr_res <= reg_has_residual;
                 if( reg_pool_en = '1' ) then
