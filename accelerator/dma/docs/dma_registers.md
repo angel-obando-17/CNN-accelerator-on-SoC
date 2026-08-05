@@ -23,6 +23,8 @@ Banco de registros propio del DMA (AXI-Lite slave separado del banco del acelera
 | 0x40 | DMA_DONE | R | [0] | 1 = el DMA terminó toda la capa (genera IRQ hacia el PS) |
 | 0x44 | DMA_POOL_EN | W | [0] | 1 = esta capa tiene pooling activo (MaxPool o GAP) |
 | 0x48 | DMA_POOL_TYPE | W | [0] | 0 = MaxPool 2x2, 1 = GAP (mismo encoding que `reg_pool_type`) |
+| 0x4C | DMA_BIAS_WORDS | W | [7:0] | Nº de palabras de 128 bits de bias a transferir (lo calcula el PS, no el hardware) |
+| 0x50 | DMA_ADDR_BIAS | W | [31:0] | Dirección DDR de los bias |
 
 ## Por qué se duplican CIN/COUT/MODE con los registros del acelerador
 

@@ -4,6 +4,7 @@
 *.o
 
 /.vscode
+/.claude
 /CNN/data/raw
 /CNN/data/segmentado_unet
 /CNN/results/legacy/resultados_experimentos/segmentacion/pares
