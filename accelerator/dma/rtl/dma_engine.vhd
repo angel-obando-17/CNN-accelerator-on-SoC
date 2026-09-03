@@ -111,6 +111,7 @@ architecture Behavioral of dma_engine is
     signal rb_bias_words   : std_logic_vector(  7 downto 0 );
     signal rb_addr_bias    : std_logic_vector( 31 downto 0 );
     signal rb_done         : std_logic;
+    signal rb_stride_en    : std_logic;
 
     -- dma_fsm <-> ddr_addr_gen.
     signal fsm_transfer_type   : std_logic_vector(  2 downto 0 );
@@ -202,7 +203,8 @@ begin
             dma_pool_type    => rb_pool_type,
             dma_bias_words   => rb_bias_words,
             dma_addr_bias    => rb_addr_bias,
-            dma_irq          => dma_done
+            dma_irq          => dma_done,
+            dma_stride_en    => rb_stride_en
         );
 
     inst_ddr_addr_gen : entity work.ddr_addr_gen
@@ -222,6 +224,7 @@ begin
             addr_bias       => rb_addr_bias,
             weight_words    => rb_weight_words,
             bias_words      => rb_bias_words,
+            stride_en       => rb_stride_en,
             tile_x          => fsm_tile_x,
             tile_y          => fsm_tile_y,
             r_local         => fsm_r_local,
@@ -251,6 +254,7 @@ begin
             pool_type        => rb_pool_type,
             addr_out         => rb_addr_out,
             dma_done         => rb_done,
+            stride_en        => rb_stride_en,
             transfer_type    => fsm_transfer_type,
             gen_tile_x       => fsm_tile_x,
             gen_tile_y       => fsm_tile_y,

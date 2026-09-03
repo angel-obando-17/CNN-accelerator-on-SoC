@@ -115,6 +115,7 @@ architecture Behavioral of cnn_top is
     signal relu6_axi_to_cnn      : std_logic_vector( 7 downto 0 );
     signal mult_axi_to_cnn       : std_logic_vector( 15 downto 0 );
     signal gap_shift_axi_to_cnn  : std_logic_vector( 4 downto 0 );
+    signal stride_en_axi_to_cnn : std_logic;
     
     -- CNN Accelerator to Axi Slave.
     signal done_cnn_to_axi       : std_logic;
@@ -166,6 +167,7 @@ begin
             relu6_val          => relu6_axi_to_cnn,
             mult               => mult_axi_to_cnn,
             gap_shift          => gap_shift_axi_to_cnn,
+            stride_en          => stride_en_axi_to_cnn,
             tile_ready         => tile_ready_dma_to_cnn,
             buf_sel            => buf_sel_dma_to_cnn,
             dma_if_wr_en       => if_wr_en_dma_to_cnn,
@@ -225,7 +227,8 @@ begin
             shift            => shift_axi_to_cnn,
             relu6_val        => relu6_axi_to_cnn,
             mult             => mult_axi_to_cnn,
-            gap_shift        => gap_shift_axi_to_cnn
+            gap_shift        => gap_shift_axi_to_cnn,
+            stride_en        => stride_en_axi_to_cnn
         );
     
     inst_dma_engine : entity work.dma_engine

@@ -52,7 +52,8 @@ entity reg_bank is
         dma_pool_type     : out std_logic;
         dma_bias_words    : out std_logic_vector(  7 downto 0 );
         dma_addr_bias     : out std_logic_vector( 31 downto 0 );
-
+        dma_stride_en     : out std_logic;
+        
         -- To DMA.
         dma_irq           : out std_logic
     );
@@ -95,6 +96,7 @@ architecture Behavioral of reg_bank is
     signal r48_pool_type    : std_logic;
     signal r4c_bias_words   : std_logic_vector(  7 downto 0 );
     signal r50_addr_bias    : std_logic_vector( 31 downto 0 );
+    signal r54_stride_en    : std_logic;
 
     -- Latch dma_done.
     signal r40_done_latched : std_logic;
@@ -131,6 +133,7 @@ begin
                 r48_pool_type    <= '0';
                 r4c_bias_words   <= ( others => '0' );
                 r50_addr_bias    <= ( others => '0' );
+                r54_stride_en    <= '0';
                 sig_b_valid      <= '0';
 
             else
@@ -187,6 +190,8 @@ begin
                             r4c_bias_words   <= dma_w_data( 7 downto 0 );
                         when "1010000" =>
                             r50_addr_bias    <= dma_w_data;
+                        when "1010100" =>
+                            r54_stride_en    <= dma_w_data( 0 );
                         when others => null;
                     end case;
                 end if;
@@ -260,6 +265,8 @@ begin
                             sig_r_data <= ( 31 downto 8 => '0' ) & r4c_bias_words;
                         when "1010000" =>
                             sig_r_data <= r50_addr_bias;
+                        when "1010100" =>
+                            sig_r_data <= ( 31 downto 1 => '0' ) & r54_stride_en;
                         when others =>
                             sig_r_data <= ( others => '0' );
                     end case;
@@ -306,6 +313,7 @@ begin
     dma_pool_type    <= r48_pool_type;
     dma_bias_words   <= r4c_bias_words;
     dma_addr_bias    <= r50_addr_bias;
+    dma_stride_en    <= r54_stride_en;
     dma_irq          <= r40_done_latched;
 
 end Behavioral;

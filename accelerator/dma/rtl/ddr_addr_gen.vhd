@@ -13,6 +13,7 @@ entity ddr_addr_gen is
         cin          : in std_logic_vector(  6 downto 0 );
         cout         : in std_logic_vector(  6 downto 0 );
         pool_en      : in std_logic;
+        stride_en    : in std_logic;
         addr_in      : in std_logic_vector( 31 downto 0 );
         addr_out     : in std_logic_vector( 31 downto 0 );
         addr_w       : in std_logic_vector( 31 downto 0 );
@@ -54,6 +55,7 @@ begin
         cin, 
         cout,
         pool_en,
+        stride_en,
         addr_in,
         addr_out,
         addr_w,
@@ -141,7 +143,7 @@ begin
         end if;
 
         -- Output Dimensions.
-        if( pool_en = '1' ) then
+        if( pool_en = '1' or stride_en = '1' ) then
             tile_w_out := shift_right( v_tile_w, 1 );
             tile_h_out := shift_right( v_tile_h, 1 );
             img_w_out  := shift_right( v_img_w, 1 );

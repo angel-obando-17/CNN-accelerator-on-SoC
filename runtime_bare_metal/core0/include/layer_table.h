@@ -10,6 +10,7 @@ struct layer_config_t {
     uint8_t     common_cin;
     bool        common_has_residual;
     bool        common_pool_en;
+    bool		common_stride_en;
     bool        common_pool_type;
 
     /* CNN registers. */

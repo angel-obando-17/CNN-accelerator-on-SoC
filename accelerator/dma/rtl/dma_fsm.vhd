@@ -16,6 +16,7 @@ entity dma_fsm is
         num_tile_y   : in  std_logic_vector(  5 downto 0 );
         has_residual : in  std_logic;
         pool_en      : in  std_logic;
+        stride_en    : in  std_logic;
         pool_type    : in  std_logic;
         addr_out     : in  std_logic_vector( 31 downto 0 );
         dma_done     : out std_logic;
@@ -163,7 +164,7 @@ begin
                     end if;
 
                 when RES_NEXT =>
-                    if( pool_en = '1' ) then
+                    if( pool_en = '1' or stride_en = '1' ) then
                         if( reg_r_local < resize( shift_right( unsigned( tile_h ), 1 ), 4 ) - 1 ) then
                             reg_r_local <= reg_r_local + 1;
                         else
@@ -187,7 +188,7 @@ begin
                     end if;
 
                 when OFM_NEXT =>
-                    if( pool_en = '1' ) then
+                    if( pool_en = '1' or stride_en = '1' ) then
                         if( reg_r_local < resize( shift_right( unsigned( tile_h ), 1 ), 4 ) - 1 ) then
                             reg_r_local <= reg_r_local + 1;
                         else
@@ -239,7 +240,8 @@ begin
         reg_first_tile,
         tile_h, 
         num_tile_x, 
-        pool_en, 
+        pool_en,
+        stride_en,
         pool_type, 
         has_residual,
         zf_return_state, 
@@ -371,8 +373,8 @@ begin
 
             when RES_NEXT =>
                 target_sel <= "010";
-                if( ( pool_en = '1' and reg_r_local < resize( shift_right( unsigned( tile_h ), 1 ), 4 ) - 1 ) or
-                    ( pool_en = '0' and reg_r_local < unsigned( tile_h ) - 1 ) ) then
+                if( ( ( pool_en = '1' or stride_en = '1' ) and reg_r_local < resize( shift_right( unsigned( tile_h ), 1 ), 4 ) - 1 ) or
+                    ( pool_en = '0' and stride_en = '0' and reg_r_local < unsigned( tile_h ) - 1 ) ) then
                     next_state <= RES_READ;
                 else
                     next_state <= START_TILE;
@@ -421,8 +423,8 @@ begin
 
             when OFM_NEXT =>
                 target_sel <= "011";
-                if( ( pool_en = '1' and reg_r_local < resize( shift_right( unsigned( tile_h ), 1 ), 4 ) - 1 ) or
-                    ( pool_en = '0' and reg_r_local < unsigned( tile_h ) - 1 ) ) then
+                if( ( ( pool_en = '1' or stride_en = '1' ) and reg_r_local < resize( shift_right( unsigned( tile_h ), 1 ), 4 ) - 1 ) or
+                    ( pool_en = '0' and stride_en = '0' and reg_r_local < unsigned( tile_h ) - 1 ) ) then
                     next_state <= OFM_WRITE;
                 elsif( reg_is_last_tile = '1' ) then
                     next_state <= DONE_LAYER;

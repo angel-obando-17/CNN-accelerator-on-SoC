@@ -1,12 +1,7 @@
 #ifndef __CNN_REGS_H__
 #define __CNN_REGS_H__
 
-/* Peripheral Definitions for peripheral CNN_TOP_0, CNN control/status interface
- * (AXI-Lite slave "axi" -> PS M_AXI_GP0). Manually defined: Vitis's xparameters.h
- * generator only supports one BASEADDR per IP instance and does not export this
- * second AXI-Lite interface. Value confirmed against the real hardware address
- * map (system_bd.hwh, MEMRANGE for SLAVEBUSINTERFACE="axi"). If the Block Design's
- * address map ever changes, this must be updated to match. */
+/* Peripheral Definitions for peripheral CNN_TOP_0 */
 #define XPAR_CNN_TOP_0_AXI_BASEADDR    0x40000000
 #define XPAR_CNN_TOP_0_AXI_HIGHADDR    0x40000FFF
 
@@ -27,5 +22,6 @@
 #define REG_GAP_SHIFT       0x38 /* [ 4:0 ]  */
 #define REG_MULT            0x3C /* [ 15:0 ] */
 #define REG_DONE            0x40 /* [ 0 ]    */
+#define REG_STRIDE_EN		0x44 /* [ 0 ]    */
 
 #endif

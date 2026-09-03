@@ -24,6 +24,7 @@ entity cnn_accelerator is
         relu6_val          : in std_logic_vector( 7 downto 0 ); -- To quant_relu
         mult               : in std_logic_vector( 15 downto 0 ); -- To quant_relu
         gap_shift          : in std_logic_vector( 4 downto 0 ); -- To gap_unit
+        stride_en          : in std_logic;
         tile_ready         : in std_logic;
         -- DMA - IFBuffer.
         buf_sel            : in std_logic;
@@ -259,7 +260,8 @@ begin
             tile_y_counter  => open,
             ci_out          => open,
             ky_out          => open,
-            kx_out          => open
+            kx_out          => open,
+            stride_en       => stride_en
         );        
     
     inst_if_buf : entity work.inputf_buf

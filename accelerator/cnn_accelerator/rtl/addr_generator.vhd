@@ -18,6 +18,7 @@ entity addr_generator is
         max_y          : in  std_logic_vector( 2 downto 0 );
         max_tile_x     : in  std_logic;
         max_tile_y     : in  std_logic_vector( 4 downto 0 );
+        stride_en      : in  std_logic;
         -- Output signals.
         mac_valid      : out std_logic;
         addr_in        : out std_logic_vector( 12 downto 0 );
@@ -159,7 +160,8 @@ begin
         cin, 
         max_x,
         max_co, 
-        reg_mode
+        reg_mode,
+        stride_en
     )
     
     variable tile_w : unsigned( 7  downto 0 );  -- max 128.
@@ -187,12 +189,25 @@ begin
        
     begin
         tile_w     := resize( unsigned( max_x ), 8 ) + 1;
-        tile_w_pad := tile_w + 2;
+        
+        if( stride_en = '1' ) then
+            tile_w_pad := shift_left( tile_w, 1 ) + 2;
+        else
+            tile_w_pad := tile_w + 2;
+        end if;
+        
         num_co     := resize( unsigned( max_co ), 3 ) + 1;
         
         -- addr_in
-        row        := resize( unsigned( y_counter ), 4 ) + resize( sig_ky, 4 );
-        col        := resize( unsigned( x_counter ), 8 ) + resize( sig_kx, 8 );
+        
+        if( stride_en = '1' ) then
+            row := shift_left( resize( unsigned( y_counter ), 4 ), 1 ) + resize( sig_ky, 4 );
+            col := shift_left( resize( unsigned( x_counter ), 8 ), 1 ) + resize( sig_kx, 8 );
+        else
+            row := resize( unsigned( y_counter ), 4 ) + resize( sig_ky, 4 );
+            col := resize( unsigned( x_counter ), 8 ) + resize( sig_kx, 8 );    
+        end if;
+        
         cin_groups := resize( unsigned( cin( 6 downto 4 ) ), 3 );  -- Cin / 16
                 
         -- addr_w

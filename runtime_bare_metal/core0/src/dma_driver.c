@@ -27,6 +27,7 @@ void dma_driver_config_layer( const struct layer_config_t* cfg ) {
 	dma_reg_write32( DMA_ADDR_OUT, 	   cfg -> dma_addr_out );
 	dma_reg_write32( DMA_ADDR_RES,     cfg -> dma_addr_res );
 	dma_reg_write32( DMA_POOL_EN, 	   (uint32_t) cfg -> common_pool_en );
+	dma_reg_write32( DMA_STRIDE_EN ),  (uint32_t) cfg -> common_stride_en );
 	dma_reg_write32( DMA_POOL_TYPE,    (uint32_t) cfg -> common_pool_type );
 	dma_reg_write32( DMA_BIAS_WORDS,   (uint32_t) cfg -> dma_bias_words );
 	dma_reg_write32( DMA_ADDR_BIAS,    cfg -> dma_addr_bias );

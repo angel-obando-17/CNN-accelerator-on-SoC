@@ -309,3 +309,48 @@ Con el margen de +0.412ns a 70MHz, se probó qué tan alto se podría subir. Un 
 Corrida por Angel directamente en Vivado (`system_bd_wrapper` como top, no `cnn_top` solo — con `cnn_top` solo como top la implementación falla porque le falta toda la infraestructura de reloj/reset del PS7, mismo motivo por el que las corridas de scratch de esta sesión necesitaban forzar un reloj falso a mano). Diseño real completo: PS7 + Processor System Reset + 4×AXI Protocol Converter + `cnn_top` (con bias + multiplicador de re-cuantización + los 2 fixes de RTL de esta sesión).
 
 **Resultado a 70MHz: `WNS=+0.353ns`, `WHS=+0.044ns`, 0 endpoints fallando de 24024.** Un poco menos de margen que la estimación out-of-context (+0.412ns) — mismo patrón ya visto en 2026-07-14 (lógica extra de PS7/resets/converters reduce el margen un poco frente al estimado de scratch, pero se mantiene positivo). **Esto cierra el análisis de timing definitivamente para esta ronda de cambios** — confirmado tanto out-of-context (scratch) como en el proyecto real, igual que se hizo la primera vez. Con esto, el proyecto queda listo para generar bitstream y re-exportar el `.xsa`.
+
+## Re-verificación post-stride (2026-09-02) — sigue cerrando, con menos margen
+
+Con el soporte de stride real completo e integrado (4 puntos: registros, wiring,
+`addr_generator.vhd` con el `shift_left` condicional, generalización de
+`pool_en` → `pool_en OR stride_en` en `ddr_addr_gen.vhd`/`dma_fsm.vhd` — ver
+`stride_support_gap.md`) y ya verificado en simulación (`tb_cnn_top_stride.vhd`,
+0 fallos), correspondía re-confirmar timing antes de dar el cambio por cerrado.
+
+Corrida out-of-context (mismo método de siempre: batch no-project, mismos
+fuentes reales + `mac_dsp.xdc` + `cnn_top_clock.xdc` sin cambios, `cnn_top`
+como top vía `synth_design -mode out_of_context`, part `xc7z020clg400-2`,
+70MHz/14.286ns):
+
+| Fecha | Periodo constreñido | WNS (post-ruteo) | Camino crítico | Notas |
+|---|---|---|---|---|
+| **2026-09-02** | **14.286 ns (70 MHz)** | **+0.234 ns** | `inst_dma_engine/inst_reg_bank(cin) → inst_ddr_addr_gen → inst_axi4_read_master(sig_ddr_addr)` — el de siempre (cálculo combinacional de dirección DDR, 2×DSP48E1+CARRY4) | **Pasa** ("All user specified timing constraints are met", 0/17356 endpoints fallando). Margen MENOR que la última corrida pre-stride (+0.412ns → +0.234ns, -0.178ns) pero sigue positivo con comodidad. El camino crítico sigue siendo el mismo de siempre, NO uno nuevo introducido por el `or stride_en` — pero ese OR sí cae en la misma zona ya ajustada del diseño, consistente con la pérdida de margen. |
+
+**Recursos: sin cambio real** — LUT 10252 (19.27%, prácticamente igual al 19.37% de antes), FF 4455 (4.19%, igual), BRAM 105 tiles (75.00%, igual), DSP 52 (23.64%, igual). Confirma lo anticipado en `stride_support_gap.md` Parte 4: el cambio no agrega DSPs ni crece BRAM, es puramente lógica de control (muxes/shifts).
+
+**Pendiente**: confirmar con Implementation sobre el proyecto real (`system_bd_wrapper`) una vez Angel vuelva a sintetizar el Block Design completo — histórico (ver filas de 2026-07-14 y 2026-08-05 arriba) es que el número real sale un poco más ajustado que el de scratch, pero se mantiene positivo. Si el número real también cierra, el análisis de timing para stride queda cerrado definitivamente.
+
+## Confirmación final real post-stride (2026-09-02)
+
+Con el Block Design completo re-sintetizado e implementado de verdad (no scratch), **primera corrida real: `WNS=-14.289ns`, 5098 endpoints fallando de 22973 — un fallo catastrófico, no un simple recorte de margen.**
+
+### Falso positivo: reloj fantasma por un `.xdc` que sobrevive a desmarcarlo en Package IP
+
+Diagnóstico (`Clock Summary`): aparecían **dos relojes** sobre lo que es físicamente la misma red — `clk_fpga_0` (el real, desde el PS7, correcto) y un `clk` separado a prácticamente la misma frecuencia (14.286ns). El `Intra`/`Inter Clock Table` confirmó que **todo `cnn_top` seguía corriendo bajo el dominio `clk`** (17348 endpoints, calza con los ~17356 del chequeo aislado) mientras `clk_fpga_0` casi no tenía nada del acelerador adentro — y el peor camino, `clk_fpga_0 → clk` (4102 endpoints, TODOS fallando), es lo que producía el WNS de -14.289ns: no es que la lógica sea más lenta, es que Vivado estaba analizando dos "relojes" no relacionados como si cruzaran de dominio.
+
+Quitar `cnn_top_clock.xdc` del fileset `constrs_1` del proyecto principal **no alcanzó** (se probó, incluso re-sintetizando todo desde cero 3 veces) — el reloj fantasma seguía apareciendo igual.
+
+**Causa real**: `cnn_top_clock.xdc` (el `create_clock -period 14.286 ... [get_ports clk]`, pensado únicamente para los chequeos aislados out-of-context) se había colado dentro del propio IP empaquetado durante el re-empaquetado de `cnn_top` (ver la saga completa de repackaging de esta sesión). **Desmarcar el checkbox "IsInclude" en la pestaña File Groups de Package IP NO evita que Vivado copie el archivo físico** a la carpeta de trabajo del IP (`architecture_pl.gen/.../ip/system_bd_cnn_top_1_0/src/cnn_top_clock.xdc`) — y como `cnn_top`, al vivir como IP dentro del block design, se sintetiza en su **propia corrida separada** (`system_bd_cnn_top_1_0_synth_1`, con su propio `.dcp`), ese `create_clock` quedó horneado dentro de ese checkpoint. Quitar el archivo del `constrs_1` del proyecto no toca ese ámbito — son dos alcances de constraints completamente distintos.
+
+**Fix real**: en el editor de Package IP, quitar `cnn_top_clock.xdc` de la lista de File Groups con el botón **Remove** (no el checkbox) → **Re-Package IP** → en el Block Design, click derecho sobre la instancia → **Reset Output Products** → **Generate Output Products** (fuerza a resintetizar ese IP específico desde el `component.xml` limpio, sin el `.dcp` contaminado) → volver a correr Synthesis + Implementation sobre `system_bd_wrapper`.
+
+**Lección para la próxima vez que se re-empaquete `cnn_top`**: la pestaña File Groups de Package IP tiene dos niveles — "está en la lista" (lo que se copia físicamente al área de trabajo del IP) y "está marcado IsInclude" (lo que queda referenciado en el `component.xml`). Para archivos que NUNCA deben viajar con el IP (como un `create_clock` pensado solo para pruebas aisladas), hay que **remover el archivo de la lista por completo**, no basta con desmarcarlo.
+
+### Resultado real, limpio (2026-09-02)
+
+| Fecha | Periodo constreñido | WNS (post-ruteo) | Reloj | Notas |
+|---|---|---|---|---|
+| **2026-09-02** | **14.285 ns (70.004 MHz, `clk_fpga_0`)** | **+0.345 ns** | Un solo dominio, limpio | **PASA — 0 endpoints fallando de 22968.** Margen prácticamente igual al de la última confirmación real pre-stride (`+0.353ns`, 2026-08-05) — el soporte de stride no le costó nada apreciable al timing real del chip completo, a pesar de que el chequeo en scratch (out-of-context, ver arriba) sí mostraba un poco menos de margen (`+0.412ns → +0.234ns`). |
+
+**Esto cierra el análisis de timing para stride definitivamente** — confirmado tanto out-of-context (scratch, `+0.234ns`) como en el proyecto real completo (`+0.345ns`), mismo patrón de siempre. El proyecto queda listo para generar bitstream y exportar el `.xsa` con el soporte de stride integrado.
