@@ -43,7 +43,7 @@ entity reg_bank is
         dma_num_tile_x    : out std_logic_vector(  1 downto 0 );
         dma_num_tile_y    : out std_logic_vector(  5 downto 0 );
         dma_has_residual  : out std_logic;
-        dma_weight_words  : out std_logic_vector(  7 downto 0 );
+        dma_weight_words  : out std_logic_vector(  9 downto 0 );
         dma_addr_w        : out std_logic_vector( 31 downto 0 );
         dma_addr_in       : out std_logic_vector( 31 downto 0 );
         dma_addr_out      : out std_logic_vector( 31 downto 0 );
@@ -87,7 +87,7 @@ architecture Behavioral of reg_bank is
     signal r20_num_tile_x   : std_logic_vector(  1 downto 0 );
     signal r24_num_tile_y   : std_logic_vector(  5 downto 0 );
     signal r28_has_residual : std_logic;
-    signal r2c_weight_words : std_logic_vector(  7 downto 0 );
+    signal r2c_weight_words : std_logic_vector(  9 downto 0 );
     signal r30_addr_w       : std_logic_vector( 31 downto 0 );
     signal r34_addr_in      : std_logic_vector( 31 downto 0 );
     signal r38_addr_out     : std_logic_vector( 31 downto 0 );
@@ -173,7 +173,7 @@ begin
                         when "0101000" =>
                             r28_has_residual <= dma_w_data( 0 );
                         when "0101100" =>
-                            r2c_weight_words <= dma_w_data( 7 downto 0 );
+                            r2c_weight_words <= dma_w_data( 9 downto 0 );
                         when "0110000" =>
                             r30_addr_w       <= dma_w_data;
                         when "0110100" =>
@@ -246,7 +246,7 @@ begin
                         when "0101000" =>
                             sig_r_data <= ( 31 downto 1 => '0' ) & r28_has_residual;
                         when "0101100" =>
-                            sig_r_data <= ( 31 downto 8 => '0' ) & r2c_weight_words;
+                            sig_r_data <= ( 31 downto 10 => '0' ) & r2c_weight_words;
                         when "0110000" =>
                             sig_r_data <= r30_addr_w;
                         when "0110100" =>

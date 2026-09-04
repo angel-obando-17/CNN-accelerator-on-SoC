@@ -186,9 +186,16 @@ begin
     variable term9  : unsigned( 9  downto 0 );  -- x * num_co.
     -- To Padding.
     variable tile_w_pad : unsigned( 7 downto 0 );
-       
+    
+    variable sig_ci_c : unsigned( 6 downto 0 );
     begin
-        tile_w     := resize( unsigned( max_x ), 8 ) + 1;
+        tile_w := resize( unsigned( max_x ), 8 ) + 1;
+        
+        if( sig_ci >= resize( unsigned( cin ), 7 ) ) then
+            sig_ci_c := resize( unsigned( cin ), 7 ) - 1;
+        else
+            sig_ci_c := sig_ci;
+        end if;
         
         if( stride_en = '1' ) then
             tile_w_pad := shift_left( tile_w, 1 ) + 2;
@@ -208,11 +215,11 @@ begin
             col := resize( unsigned( x_counter ), 8 ) + resize( sig_kx, 8 );    
         end if;
         
-        cin_groups := resize( unsigned( cin( 6 downto 4 ) ), 3 );  -- Cin / 16
+        cin_groups := resize( shift_right( resize( unsigned( cin ), 8 ) + 15, 4 ), 3 ); -- ceil( Cin / 16 ).
                 
         -- addr_w
         term3 := resize( unsigned( co_counter ) * unsigned( cin ) * to_unsigned( 9, 4 ), 12 );
-        term4 := resize( sig_ci * to_unsigned( 9, 4 ), 11 );
+        term4 := resize( sig_ci_c * to_unsigned( 9, 4 ), 11 );
         term5 := resize( sig_ky * to_unsigned( 3, 2 ), 4 );
         term6 := resize( unsigned( co_counter ) * to_unsigned( 9, 4 ), 6 );
         term7 := resize( unsigned( co_counter ) * unsigned( cin ), 9 );
@@ -228,8 +235,8 @@ begin
                 -- Conv3x3 y PW1x1: word = base_pixel + sig_ci/16, byte = sig_ci mod 16
                 term1 := resize( row * tile_w_pad * cin_groups, 13 );
                 term2 := resize( col * cin_groups, 13 );
-                addr_in  <= std_logic_vector( term1 + term2 + resize( unsigned( sig_ci( 6 downto 4 ) ), 13 ) );
-                byte_sel <= std_logic_vector( sig_ci( 3 downto 0 ) );
+                addr_in  <= std_logic_vector( term1 + term2 + resize( sig_ci_c( 6 downto 4 ), 13 ) );
+                byte_sel <= std_logic_vector( sig_ci_c( 3 downto 0 ) );
         end case;
         
         case reg_mode is
@@ -238,7 +245,7 @@ begin
             when "01" =>
                 addr_w <= std_logic_vector( resize( term6, 12 ) + resize( term5, 12 ) + resize( sig_kx, 12 ) );
             when "10" =>
-                addr_w <= std_logic_vector( resize( term7, 12 ) + resize( sig_ci, 12 ) );
+                addr_w <= std_logic_vector( resize( term7, 12 ) + resize( sig_ci_c, 12 ) );
             when others =>
                 addr_w <= ( others => '0' );
         end case;

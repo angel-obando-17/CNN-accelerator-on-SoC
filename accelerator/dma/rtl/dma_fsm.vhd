@@ -139,14 +139,14 @@ begin
                 when IFM_LEFT =>
                     if( left_zero_en = '1' ) then
                         reg_zf_addr       <= unsigned( gen_left_addr );
-                        reg_zf_words_left <= resize( unsigned( cin( 6 downto 4 ) ), 10 );
+                        reg_zf_words_left <= resize( shift_right( resize( unsigned( cin ), 10 ) + 15, 4 ), 10 );
                         zf_return_state   <= IFM_RIGHT;
                     end if;
 
                 when IFM_RIGHT =>
                     if( right_zero_en = '1' ) then
                         reg_zf_addr       <= unsigned( gen_right_addr );
-                        reg_zf_words_left <= resize( unsigned( cin( 6 downto 4 ) ), 10 );
+                        reg_zf_words_left <= resize( shift_right( resize( unsigned( cin ), 10 ) + 15, 4 ), 10 );
                         zf_return_state   <= IFM_NEXT;
                     end if;
 

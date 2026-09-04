@@ -17,7 +17,7 @@ void cnn_driver_config_layer( const struct layer_config_t* cfg ) {
 	cnn_reg_write32( REG_MAX_TILE_Y,   (uint32_t) cfg -> cnn_max_tile_y );
 	cnn_reg_write32( REG_HAS_RESIDUAL, (uint32_t) cfg -> common_has_residual );
 	cnn_reg_write32( REG_POOL_EN, 	   (uint32_t) cfg -> common_pool_en );
-	cnn_reg_write32( REG_STRIDE_EN ),  (uint32_t) cfg -> common_stride_en );
+	cnn_reg_write32( REG_STRIDE_EN,    (uint32_t) cfg -> common_stride_en );
 	cnn_reg_write32( REG_POOL_TYPE,    (uint32_t) cfg -> common_pool_type );
 	cnn_reg_write32( REG_SHIFT, 	   (uint32_t) cfg -> cnn_shift );
 	cnn_reg_write32( REG_RELU6_VAL,    (uint32_t) cfg -> cnn_relu6_val );

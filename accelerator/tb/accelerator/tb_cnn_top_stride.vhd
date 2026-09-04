@@ -163,7 +163,7 @@ architecture Behavioral of tb_cnn_top_stride is
 
     signal dma_done : std_logic;
 
-    constant DDR_WORDS : integer := 49152;
+    constant DDR_WORDS : integer := 54528;
     type ddr_mem_array is array( 0 to DDR_WORDS - 1 ) of std_logic_vector( 63 downto 0 );
 
     signal ddr_mem : ddr_mem_array := (
@@ -252,6 +252,86 @@ architecture Behavioral of tb_cnn_top_stride is
         44290 => x"0000006800000068", 44291 => x"0000006800000068",
         44292 => x"0000006800000068", 44293 => x"0000006800000068",
         44294 => x"0000006800000068", 44295 => x"0000006800000068",
+
+        -- CASO F ( Conv3x3, Cin=3, verificacion del fix de cin_groups
+        -- floor->ceil -- ver cin_grouping_gap.md ). Activacion y pesos por
+        -- defecto (=1) -- solo hace falta poner bias=0 ( addr 0x5B800,
+        -- word 46848 ).
+        46848 => x"0000000000000000", 46849 => x"0000000000000000",
+        46850 => x"0000000000000000", 46851 => x"0000000000000000",
+        46852 => x"0000000000000000", 46853 => x"0000000000000000",
+        46854 => x"0000000000000000", 46855 => x"0000000000000000",
+
+        -- CASO G ( PW1x1, Cin=24, verificacion del fix de cin_groups en el
+        -- LADO DE LECTURA -- 1 fila, 2 columnas ). Pixel0: canales 0-15 = 1,
+        -- canales 16-23 = 2. Pixel1: canales 0-15 = 3, canales 16-23 = 4.
+        -- Base IN word 47616 ( addr 0x5D000 ). Empaquetado denso ( Cin=24
+        -- bytes reales por pixel, sin relleno en DDR -- ver row_stride_in
+        -- := img_w*cin en ddr_addr_gen.vhd ): pixel0 ocupa bytes 0-23,
+        -- pixel1 bytes 24-47 relativos a la base.
+        47616 => x"0101010101010101", 47617 => x"0101010101010101",
+        47618 => x"0202020202020202",
+        47619 => x"0303030303030303", 47620 => x"0303030303030303",
+        47621 => x"0404040404040404",
+        -- CASO G, bias = 0 ( addr 0x5F800, word 48896 ).
+        48896 => x"0000000000000000", 48897 => x"0000000000000000",
+        48898 => x"0000000000000000", 48899 => x"0000000000000000",
+        48900 => x"0000000000000000", 48901 => x"0000000000000000",
+        48902 => x"0000000000000000", 48903 => x"0000000000000000",
+
+        -- CASO H ( PW1x1, Cin=16 ( sin afectar ), Cout=24, verificacion del
+        -- fix de cout_groups en el LADO DE ESCRITURA -- 2 filas, 1 columna ).
+        -- fila0: activacion = 2 ( todos los canales ). fila1: activacion = 5.
+        -- Base IN word 49664 ( addr 0x61000 ), 16 bytes ( 2 words de 64b )
+        -- por fila ( 1 pixel x 16 canales, Cin=16 ya cabe en un solo grupo ).
+        49664 => x"0202020202020202", 49665 => x"0202020202020202",
+        49666 => x"0505050505050505", 49667 => x"0505050505050505",
+        -- CASO H, bias = 0 ( addr 0x63800, word 50944 ). Con max_co=1
+        -- ( 2 grupos de 16 canales ) el bias_buf se indexa por co_counter,
+        -- asi que hacen falta los DOS grupos ( 8 words c/u ) igual que con
+        -- weight_words -- si no, bias(1) queda sin inicializar y contamina
+        -- con 'X' el grupo 2 (co_counter=1) de cada fila.
+        50944 => x"0000000000000000", 50945 => x"0000000000000000",
+        50946 => x"0000000000000000", 50947 => x"0000000000000000",
+        50948 => x"0000000000000000", 50949 => x"0000000000000000",
+        50950 => x"0000000000000000", 50951 => x"0000000000000000",
+        50952 => x"0000000000000000", 50953 => x"0000000000000000",
+        50954 => x"0000000000000000", 50955 => x"0000000000000000",
+        50956 => x"0000000000000000", 50957 => x"0000000000000000",
+        50958 => x"0000000000000000", 50959 => x"0000000000000000",
+
+        -- CASO F2 ( Conv3x3, Cin=3, imagen de 4 COLUMNAS x 1 fila -- ver si
+        -- el gap de empaquetado denso del Caso G TAMBIEN afecta a Conv3x3
+        -- con Cin=3 real, no solo a PW1x1 con Cin=24 ). Activacion varia
+        -- por columna: col0=col1=3, col2=col3=9 ( igual estilo que Caso B ).
+        -- Empaquetado denso: 3 bytes/pixel, sin relleno. Base IN word 51200
+        -- ( addr 0x64000 ). DDR bytes absolutos 0-7 = [3,3,3,3,3,3,9,9]
+        -- (pixel0=bytes0-2, pixel1=bytes3-5, pixel2 empieza en byte6).
+        51200 => x"0909030303030303",
+        -- DDR bytes absolutos 8-15 = [9,9,9,9,0,0,0,0] (resto de pixel2 en
+        -- byte8, pixel3=bytes9-11, byte12+ fuera de imagen real).
+        51201 => x"0000000009090909",
+        -- CASO F2, bias = 0 ( addr 0x64800, word 51328 ).
+        51328 => x"0000000000000000", 51329 => x"0000000000000000",
+        51330 => x"0000000000000000", 51331 => x"0000000000000000",
+        51332 => x"0000000000000000", 51333 => x"0000000000000000",
+        51334 => x"0000000000000000", 51335 => x"0000000000000000",
+
+        -- CASO H2 ( PW1x1, Cin=16, Cout=24, 1 fila x 2 COLUMNAS -- ver si
+        -- el gap de empaquetado denso TAMBIEN afecta la escritura de OFM
+        -- con columnas, no solo con filas como el Caso H ). col0=activ 2,
+        -- col1=activ 5. Base IN word 52224 ( addr 0x66000 ).
+        52224 => x"0202020202020202", 52225 => x"0202020202020202",
+        52226 => x"0505050505050505", 52227 => x"0505050505050505",
+        -- CASO H2, bias = 0 x2 grupos ( addr 0x69000, word 53760 ).
+        53760 => x"0000000000000000", 53761 => x"0000000000000000",
+        53762 => x"0000000000000000", 53763 => x"0000000000000000",
+        53764 => x"0000000000000000", 53765 => x"0000000000000000",
+        53766 => x"0000000000000000", 53767 => x"0000000000000000",
+        53768 => x"0000000000000000", 53769 => x"0000000000000000",
+        53770 => x"0000000000000000", 53771 => x"0000000000000000",
+        53772 => x"0000000000000000", 53773 => x"0000000000000000",
+        53774 => x"0000000000000000", 53775 => x"0000000000000000",
 
         others => x"0101010101010101" );
 
@@ -715,6 +795,141 @@ begin
         check( ddr_mem( 43526 ), x"7F7F7F7F7F7F7F7F", "CasoE pixel(1,1)" );
         ack_dma_done;
         report "=== CASO E OK (regresion confirmada: stride_en=0 no cambio nada del datapath ya verificado) ===";
+
+        -- CASO F: verificacion del fix cin_groups floor->ceil, LADO DE
+        -- LECTURA (ver cin_grouping_gap.md). Conv3x3, Cin=3 (igual que
+        -- conv1 real), imagen/tile 2x2 (un solo tile -> los 4 bordes del
+        -- tile son bordes reales de la imagen). Pesos y activacion por
+        -- defecto (=1) -- se verifica por CONTEO de taps validos, igual
+        -- estilo que CASO C: cada esquina de una imagen 2x2 excluye
+        -- exactamente 1 fila y 1 columna del kernel 3x3 -> 2x2=4 taps
+        -- validos por pixel. sum = Cin(3) * 4 = 12.
+        -- SIN el fix, cin_groups=floor(3/16)=0 colapsaria term1/term2 a
+        -- CERO siempre -- el acelerador leeria la MISMA direccion (0,0)
+        -- para los 9 taps de CADA pixel, sin importar el zero-padding real
+        -- de los bordes -> sum = 9*3 = 27 en vez de 12.
+        report "--- CASO F: Conv3x3, Cin=3 (fix cin_groups, lado lectura) ---";
+        cfg_accel( "00", 27, 1, 1, 0, 0, 0, 0, 0 );
+        axi_write_accel(  8, x"00000003" ); -- REG_CIN = 3 (override, cfg_accel fija 16).
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 (explicito).
+        cfg_dma( 2, 0, 27, 16#58000#, 16#59000#, 16#5A000#, 16#5B000#, 0, 0, 4, 16#5B800# );
+        axi_write_dma(  8, x"00000003" ); -- DMA_CIN = 3 (override).
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 (explicito).
+        run_layer_and_ack;
+
+        check( ddr_mem( 46080 ), x"0C0C0C0C0C0C0C0C", "CasoF pixel(0,0) = 12 (3 canales x 4 taps validos; bug daria 27)" );
+        check( ddr_mem( 46082 ), x"0C0C0C0C0C0C0C0C", "CasoF pixel(0,1) = 12" );
+        check( ddr_mem( 46084 ), x"0C0C0C0C0C0C0C0C", "CasoF pixel(1,0) = 12" );
+        check( ddr_mem( 46086 ), x"0C0C0C0C0C0C0C0C", "CasoF pixel(1,1) = 12" );
+        ack_dma_done;
+        report "=== CASO F: ver arriba OK/FALLO (cin_groups = ceil(3/16) = 1) ===";
+
+        -- CASO F2: MISMO Cin=3 que conv1 real, pero con 4 COLUMNAS reales
+        -- (Caso F solo tenia 2, y con activacion uniforme no podia detectar
+        -- un corrimiento entre columnas -- ver hallazgo del Caso G). Imagen
+        -- 4x1 (una sola fila real), activacion varia por columna: col0=
+        -- col1=3, col2=col3=9. Con kernel 3x3 y una sola fila real (halo
+        -- de ceros arriba/abajo), cada pixel de salida ve exactamente las
+        -- columnas {x-1,x,x+1} intersectadas con {0,1,2,3}. sum = Cin(3) *
+        -- suma_de_esas_columnas: x=0->3+3=6->18. x=1->3+3+9=15->45.
+        -- x=2->3+9+9=21->63. x=3->9+9=18->54.
+        report "--- CASO F2: Conv3x3, Cin=3, 4 columnas (mismo hallazgo del Caso G, con conv1 real) ---";
+        cfg_accel( "00", 27, 3, 0, 0, 0, 0, 0, 0 );
+        axi_write_accel(  8, x"00000003" ); -- REG_CIN = 3 (override).
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 (explicito).
+        cfg_dma( 4, 0, 27, 16#58000#, 16#64000#, 16#65000#, 16#5B000#, 0, 0, 4, 16#64800# );
+        axi_write_dma(  8, x"00000003" ); -- DMA_CIN = 3 (override).
+        axi_write_dma( 20, x"00000001" ); -- DMA_IMG_H = 1 (override, tile_n=4 lo dejaria en 4).
+        axi_write_dma( 28, x"00000001" ); -- DMA_TILE_H = 1 (override).
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 (explicito).
+        run_layer_and_ack;
+
+        check( ddr_mem( 51712 ), x"1212121212121212", "CasoF2 pixel(0) = 18 (Cin*[3+3])" );
+        check( ddr_mem( 51714 ), x"2D2D2D2D2D2D2D2D", "CasoF2 pixel(1) = 45 (Cin*[3+3+9])" );
+        check( ddr_mem( 51716 ), x"3F3F3F3F3F3F3F3F", "CasoF2 pixel(2) = 63 (Cin*[3+9+9])" );
+        check( ddr_mem( 51718 ), x"3636363636363636", "CasoF2 pixel(3) = 54 (Cin*[9+9])" );
+        ack_dma_done;
+        report "=== CASO F2: ver arriba OK/FALLO (busca el mismo gap del Caso G pero en conv1 real) ===";
+
+        -- CASO G: verificacion del fix cin_groups, LADO DE LECTURA, con DOS
+        -- COLUMNAS (igual que irb3_exp/irb4_exp reales, Cin=24). PW1x1, 1
+        -- fila x 2 columnas. Empaquetado denso en DDR: pixel0 ocupa los
+        -- bytes 0-23 relativos a IN, pixel1 los bytes 24-47 -- SIN relleno
+        -- a multiplo de 16 (row_stride_in = img_w*cin, cin crudo). pixel0:
+        -- canales 0-15=1, canales 16-23=2 -> sum=16*1+8*2=32. pixel1:
+        -- canales 0-15=3, canales 16-23=4 -> sum=16*3+8*4=80.
+        report "--- CASO G: PW1x1, Cin=24, 2 columnas (fix cin_groups, lado lectura) ---";
+        cfg_accel( "10", 24, 1, 0, 0, 0, 0, 0, 0 );
+        axi_write_accel(  8, x"00000018" ); -- REG_CIN = 24 (override).
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 (explicito).
+        cfg_dma( 1, 0, 24, 16#5C000#, 16#5D000#, 16#5E000#, 16#5F000#, 0, 0, 4, 16#5F800# );
+        axi_write_dma(  8, x"00000018" ); -- DMA_CIN = 24 (override).
+        axi_write_dma( 16, x"00000002" ); -- DMA_IMG_W = 2 (override, tile_n=1 lo dejaria en 1).
+        axi_write_dma( 24, x"00000002" ); -- DMA_TILE_W = 2 (override).
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 (explicito).
+        run_layer_and_ack;
+
+        check( ddr_mem( 48128 ), x"2020202020202020", "CasoG pixel(0,0) = 32 (16*1 + 8*2)" );
+        check( ddr_mem( 48130 ), x"5050505050505050", "CasoG pixel(0,1) = 80 (16*3 + 8*4)" );
+        ack_dma_done;
+        report "=== CASO G: ver arriba OK/FALLO (cin_groups = ceil(24/16) = 2, 2 columnas) ===";
+
+        -- CASO H: verificacion del fix cout_groups, LADO DE ESCRITURA (ver
+        -- cin_grouping_gap.md Parte 4). PW1x1, Cin=16 (sin afectar), pero
+        -- Cout=24 (igual que irb2_pw/irb3_pw reales) -- 2 filas x 1 columna,
+        -- activacion distinta por fila (fila0=2, fila1=5) para detectar si
+        -- el stride entre filas del OFBuffer (row_words_out, gobernado por
+        -- cout_groups) esta mal. sum fila0 = 16*2 = 32. sum fila1 = 16*5 = 80.
+        report "--- CASO H: PW1x1, Cin=16, Cout=24, 2 filas (fix cout_groups, lado escritura) ---";
+        cfg_accel( "10", 16, 0, 1, 0, 0, 0, 0, 0 );
+        axi_write_accel( 16, x"00000001" ); -- REG_MAX_CO = 1 (2 grupos de 16 -> Cout=24).
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 (explicito).
+        -- weight_words = 32, NO 16: con max_co=1 el acelerador lee addr_w
+        -- 0-15 para co=0 Y 16-31 para co=1 (term7 = co_counter*cin), asi
+        -- que el weight buffer necesita las DOS mitades cargadas o el
+        -- segundo grupo de canales de salida lee BRAM sin inicializar.
+        cfg_dma( 1, 0, 32, 16#60000#, 16#61000#, 16#62000#, 16#63000#, 0, 0, 8, 16#63800# );
+        axi_write_dma( 12, x"00000018" ); -- DMA_COUT = 24 (override).
+        axi_write_dma( 20, x"00000002" ); -- DMA_IMG_H = 2 (override).
+        axi_write_dma( 28, x"00000002" ); -- DMA_TILE_H = 2 (override).
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 (explicito).
+        run_layer_and_ack;
+
+        report "--- fila0 (activacion=2): 16*2=32 ---";
+        check( ddr_mem( 50176 ), x"2020202020202020", "CasoH fila0 canales 0-7 = 32" );
+        check( ddr_mem( 50177 ), x"2020202020202020", "CasoH fila0 canales 8-15 = 32" );
+        check( ddr_mem( 50178 ), x"2020202020202020", "CasoH fila0 canales 16-23 = 32" );
+        report "--- fila1 (activacion=5): 16*5=80 (si cout_groups estuviera mal, leeria datos de fila0 aqui) ---";
+        check( ddr_mem( 50179 ), x"5050505050505050", "CasoH fila1 canales 0-7 = 80" );
+        check( ddr_mem( 50180 ), x"5050505050505050", "CasoH fila1 canales 8-15 = 80" );
+        check( ddr_mem( 50181 ), x"5050505050505050", "CasoH fila1 canales 16-23 = 80" );
+        ack_dma_done;
+        report "=== CASO H: ver arriba OK/FALLO (cout_groups = ceil(24/16) = 2, 2 filas) ===";
+
+        -- CASO H2: MISMO Cout=24 que irb2_pw/irb3_pw reales, pero con 2
+        -- COLUMNAS en vez de 2 filas (Caso H solo probo filas). col0=
+        -- activacion 2 (sum=16*2=32), col1=activacion 5 (sum=16*5=80),
+        -- ambos grupos (co=0,1) por columna. Empaquetado denso esperado:
+        -- col0 ocupa 24 bytes reales, col1 los siguientes 24.
+        report "--- CASO H2: PW1x1, Cout=24, 2 columnas (busca el mismo gap del Caso G, lado escritura) ---";
+        cfg_accel( "10", 16, 1, 0, 0, 0, 0, 0, 0 );
+        axi_write_accel( 16, x"00000001" ); -- REG_MAX_CO = 1.
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 (explicito).
+        cfg_dma( 1, 0, 32, 16#60000#, 16#66000#, 16#68000#, 16#63000#, 0, 0, 8, 16#69000# );
+        axi_write_dma( 12, x"00000018" ); -- DMA_COUT = 24 (override).
+        axi_write_dma( 16, x"00000002" ); -- DMA_IMG_W = 2 (override).
+        axi_write_dma( 24, x"00000002" ); -- DMA_TILE_W = 2 (override).
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 (explicito).
+        run_layer_and_ack;
+
+        check( ddr_mem( 53248 ), x"2020202020202020", "CasoH2 col0 canales 0-7 = 32" );
+        check( ddr_mem( 53249 ), x"2020202020202020", "CasoH2 col0 canales 8-15 = 32" );
+        check( ddr_mem( 53250 ), x"2020202020202020", "CasoH2 col0 canales 16-23 = 32" );
+        check( ddr_mem( 53251 ), x"5050505050505050", "CasoH2 col1 canales 0-7 = 80" );
+        check( ddr_mem( 53252 ), x"5050505050505050", "CasoH2 col1 canales 8-15 = 80" );
+        check( ddr_mem( 53253 ), x"5050505050505050", "CasoH2 col1 canales 16-23 = 80" );
+        ack_dma_done;
+        report "=== CASO H2: ver arriba OK/FALLO (busca el gap del Caso G del lado de escritura, con columnas) ===";
 
         report "=== RESUMEN: " & integer'image( errors ) & " fallo(s) ===" severity note;
         if( errors = 0 ) then

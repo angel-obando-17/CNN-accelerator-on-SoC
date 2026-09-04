@@ -16,7 +16,7 @@
 #define DMA_NUM_TILE_X      0x20 /* [ 1:0 ]  */
 #define DMA_NUM_TILE_Y      0x24 /* [ 5:0 ]  */
 #define DMA_HAS_RESIDUAL    0x28 /* [ 0 ]    */
-#define DMA_WEIGHT_WORDS    0x2C /* [ 7:0 ]  */
+#define DMA_WEIGHT_WORDS    0x2C /* [ 9:0 ]  */
 #define DMA_ADDR_W          0x30 /* [ 31:0 ] */
 #define DMA_ADDR_IN         0x34 /* [ 31:0 ] */
 #define DMA_ADDR_OUT        0x38 /* [ 31:0 ] */

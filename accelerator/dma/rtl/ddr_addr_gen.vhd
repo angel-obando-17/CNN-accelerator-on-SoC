@@ -19,7 +19,7 @@ entity ddr_addr_gen is
         addr_w       : in std_logic_vector( 31 downto 0 );
         addr_res     : in std_logic_vector( 31 downto 0 );
         addr_bias    : in std_logic_vector( 31 downto 0 );
-        weight_words : in std_logic_vector(  7 downto 0 );
+        weight_words : in std_logic_vector(  9 downto 0 );
         bias_words   : in std_logic_vector(  7 downto 0 );
 
         -- Actual State from DMA_FSM.
@@ -114,8 +114,8 @@ begin
         v_num_tile_x := resize( unsigned( num_tile_x ), 16 );
         v_num_tile_y := resize( unsigned( num_tile_y ), 16 );
         v_r_local    := resize( unsigned( r_local ), 16 );
-        cin_groups   := resize( unsigned( cin( 6 downto 4 ) ), 16 );
-        cout_groups  := resize( unsigned( cout( 6 downto 4 ) ), 16 );
+        cin_groups   := resize( shift_right( resize( unsigned( cin ), 16 ) + 15, 4 ), 16 );  -- ceil( Cin / 16 ).
+        cout_groups  := resize( shift_right( resize( unsigned( cout ), 16 ) + 15, 4 ), 16 ); -- ceil( Cout / 16 ).
 
         -- Edge conditions.
         if( v_tile_y = 0 ) then
@@ -228,7 +228,7 @@ begin
             -- Weights.
             when others =>
                 ddr_addr    <= addr_w;
-                burst_words <= "00" & weight_words;
+                burst_words <= weight_words;
                 local_addr  <= ( others => '0' );
 
         end case;

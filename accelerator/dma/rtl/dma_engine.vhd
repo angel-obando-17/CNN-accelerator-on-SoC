@@ -101,7 +101,7 @@ architecture Behavioral of dma_engine is
     signal rb_num_tile_x   : std_logic_vector(  1 downto 0 );
     signal rb_num_tile_y   : std_logic_vector(  5 downto 0 );
     signal rb_has_residual : std_logic;
-    signal rb_weight_words : std_logic_vector(  7 downto 0 );
+    signal rb_weight_words : std_logic_vector(  9 downto 0 );
     signal rb_addr_w       : std_logic_vector( 31 downto 0 );
     signal rb_addr_in      : std_logic_vector( 31 downto 0 );
     signal rb_addr_out     : std_logic_vector( 31 downto 0 );
