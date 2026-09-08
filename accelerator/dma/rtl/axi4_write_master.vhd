@@ -48,12 +48,14 @@ architecture Behavioral of axi4_write_master is
     signal current_state, next_state : state_type;
 
     -- Transffer progress.
-    signal sig_ddr_addr    : unsigned( 31 downto 0 ) := ( others => '0' );
-    signal sig_local_addr  : unsigned( 11 downto 0 ) := ( others => '0' );
-    signal sig_words_left  : unsigned(  9 downto 0 ) := ( others => '0' );
-    signal sig_chunk_words : unsigned(  9 downto 0 ) := ( others => '0' );
-    signal sig_chunk_left  : unsigned(  9 downto 0 ) := ( others => '0' );
-    signal sig_awlen       : std_logic_vector(  7 downto 0 ) := ( others => '0' );
+    signal sig_ddr_addr     : unsigned( 31 downto 0 ) := ( others => '0' );
+    signal sig_local_addr   : unsigned( 11 downto 0 ) := ( others => '0' );
+    signal sig_words_left   : unsigned(  9 downto 0 ) := ( others => '0' );
+    signal sig_chunk_words  : unsigned(  9 downto 0 ) := ( others => '0' );
+    signal sig_chunk_left   : unsigned(  9 downto 0 ) := ( others => '0' ); 
+    signal sig_words_to_bnd : unsigned(  9 downto 0 ); 
+    signal sig_chunk_max    : unsigned(  9 downto 0 );
+    signal sig_awlen        : std_logic_vector( 7 downto 0 ) := ( others => '0' );
 
     signal sig_wvalid : std_logic;
 begin
@@ -129,11 +131,15 @@ begin
                 end if;
 
             when AW_ADDR =>
-                m_axi_awvalid <= '1';
-                if( m_axi_awready = '1' ) then
-                    next_state <= RD_LOCAL;
+                if( sig_words_left = 0 ) then
+                    next_state <= CHECK_MORE;
                 else
-                    next_state <= AW_ADDR;
+                    m_axi_awvalid <= '1';
+                    if( m_axi_awready = '1' ) then
+                        next_state <= RD_LOCAL;
+                    else
+                        next_state <= AW_ADDR;
+                    end if;
                 end if;
 
             when RD_LOCAL =>
@@ -185,14 +191,17 @@ begin
     end process;
 
     -- AW Channel ( Write Address ).
-    m_axi_awid    <= "0000";
-    m_axi_awaddr  <= std_logic_vector( sig_ddr_addr );
-    sig_chunk_words <= CHUNK_WORDS when ( sig_words_left > CHUNK_WORDS ) else sig_words_left;
-    sig_awlen <= std_logic_vector( to_unsigned( 127, 8 ) ) when ( sig_words_left > CHUNK_WORDS ) else
-                 std_logic_vector( resize( shift_left( sig_words_left, 1 ) - 1, 8 ) );
-    m_axi_awlen   <= sig_awlen;
-    m_axi_awsize  <= "011";
-    m_axi_awburst <= "01";
+    m_axi_awid       <= "0000";
+    m_axi_awaddr     <= std_logic_vector( sig_ddr_addr );
+    sig_words_to_bnd <= to_unsigned( 256, 10 ) - resize( unsigned( sig_ddr_addr( 11 downto 4 ) ), 10 );
+    sig_chunk_max    <= CHUNK_WORDS when ( sig_words_to_bnd > CHUNK_WORDS ) 
+                        else sig_words_to_bnd;
+    sig_chunk_words  <= sig_chunk_max when ( sig_words_left > sig_chunk_max ) 
+                        else sig_words_left;
+    sig_awlen        <= std_logic_vector( resize( shift_left( sig_chunk_words, 1 ) - 1, 8 ) );
+    m_axi_awlen      <= sig_awlen;
+    m_axi_awsize     <= "011";
+    m_axi_awburst    <= "01";
 
     -- W Channel.
     m_axi_wvalid <= sig_wvalid;
