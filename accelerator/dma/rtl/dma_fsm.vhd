@@ -437,7 +437,7 @@ begin
                 target_sel       <= "011";
                 gap_flush_active <= '1';
                 gap_ddr_addr     <= addr_out;
-                gap_burst_words  <= std_logic_vector( resize( unsigned( cout( 6 downto 4 ) ), 10 ) );
+                gap_burst_words  <= std_logic_vector( resize( shift_right( resize( unsigned( cout ), 10 ) + 15, 4 ), 10 ) );
                 if( wr_done = '1' ) then
                     next_state <= DONE_LAYER;
                 else

@@ -215,6 +215,19 @@ architecture Behavioral of tb_cnn_top_hardcore is
         18186 => x"0000000500000005", 18187 => x"0000000500000005",
         18188 => x"0000000500000005", 18189 => x"0000000500000005",
         18190 => x"0000000500000005", 18191 => x"0000000500000005",
+        -- Caso M ( PW1x1 + GAP + Cout=24, NO multiplo de 16 ): mismo montaje
+        -- que el Caso L pero con Cout=24, para cazar el 5to sitio del bug
+        -- floor-vs-ceil ( gap_burst_words en el estado GAP_FLUSH de
+        -- dma_fsm.vhd ). bias grupo0=0, grupo1=5 ( base 0x27800/8=20224 ).
+        20224 => x"0000000000000000", 20225 => x"0000000000000000",
+        20226 => x"0000000000000000", 20227 => x"0000000000000000",
+        20228 => x"0000000000000000", 20229 => x"0000000000000000",
+        20230 => x"0000000000000000", 20231 => x"0000000000000000",
+        20232 => x"0000000500000005", 20233 => x"0000000500000005",
+        20234 => x"0000000500000005", 20235 => x"0000000500000005",
+        20236 => x"0000000500000005", 20237 => x"0000000500000005",
+        20238 => x"0000000500000005", 20239 => x"0000000500000005",
+
         others => x"0101010101010101" );
 
     type rd_state_type is ( RD_S_IDLE, RD_S_BURST );
@@ -696,6 +709,30 @@ begin
         check( ddr_mem( 17410 ), x"1515151515151515", "CasoL grupo1 (co=1) -- GAP" );
         ack_dma_done;
         report "=== CASO L OK (fix de gap_unit.vhd/co_counter_reg verificado con GAP real) ===";
+
+        -- CASO M: identico al Caso L pero con Cout=24 en vez de 32 -- o sea
+        -- Cout NO multiplo de 16, con los mismos 2 grupos de co ( max_co=1 ).
+        -- Es el 5to sitio del bug floor-vs-ceil: GAP_FLUSH en dma_fsm.vhd
+        -- calculaba cuantas palabras volcar a DDR como cout( 6 downto 4 ), o
+        -- sea floor( Cout/16 ). Con Cout=24 eso da 1 en vez de 2, y el grupo 1
+        -- ( canales 16-23 ) NUNCA se escribia: quedaba el relleno 0x01 de la
+        -- DDR falsa en su lugar. Lo traicionero es que gap_unit.vhd SI acumula
+        -- y escribe los 2 grupos al OFBuffer ( se indexa por max_co, no por
+        -- Cout ), asi que el dato existe y esta bien -- lo que fallaba era el
+        -- volcado, que deriva la cantidad de Cout por otro camino.
+        -- Matematica identica al Caso L: grupo0 quant=16/pixel, GAP 4x16=64,
+        -- gap_shift2 -> 16=0x10. grupo1 quant=21/pixel, GAP 4x21=84 -> 21=0x15.
+        report "--- CASO M: PW1x1 + GAP + Cout=24 (5to sitio floor/ceil, GAP_FLUSH) ---";
+        cfg_accel( "10", 16, 1, 1, 0, 1, 1, 0, 2 );
+        axi_write_accel( 16, x"00000001" ); -- MAX_CO = 1 ( 2 grupos ).
+        cfg_dma( 2, 0, 32, 16#24000#, 16#25000#, 16#26000#, 16#27000#, 1, 1, 8, 16#27800# );
+        axi_write_dma( 12, x"00000018" ); -- DMA_COUT = 24 ( NO multiplo de 16 ).
+        run_layer_and_ack;
+
+        check( ddr_mem( 19456 ), x"1010101010101010", "CasoM grupo0 (co=0) -- GAP" );
+        check( ddr_mem( 19458 ), x"1515151515151515", "CasoM grupo1 (co=1, canales 16-23) -- GAP" );
+        ack_dma_done;
+        report "=== CASO M: ver arriba OK/FALLO (gap_burst_words = ceil(24/16) = 2) ===";
 
         report "=== RESUMEN: " & integer'image( errors ) & " fallo(s) ===" severity note;
         if( errors = 0 ) then
