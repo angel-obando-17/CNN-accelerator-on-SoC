@@ -354,3 +354,74 @@ Quitar `cnn_top_clock.xdc` del fileset `constrs_1` del proyecto principal **no a
 | **2026-09-02** | **14.285 ns (70.004 MHz, `clk_fpga_0`)** | **+0.345 ns** | Un solo dominio, limpio | **PASA — 0 endpoints fallando de 22968.** Margen prácticamente igual al de la última confirmación real pre-stride (`+0.353ns`, 2026-08-05) — el soporte de stride no le costó nada apreciable al timing real del chip completo, a pesar de que el chequeo en scratch (out-of-context, ver arriba) sí mostraba un poco menos de margen (`+0.412ns → +0.234ns`). |
 
 **Esto cierra el análisis de timing para stride definitivamente** — confirmado tanto out-of-context (scratch, `+0.234ns`) como en el proyecto real completo (`+0.345ns`), mismo patrón de siempre. El proyecto queda listo para generar bitstream y exportar el `.xsa` con el soporte de stride integrado.
+
+## Confirmación final tras la auditoría de septiembre (2026-09-08)
+
+Corrida real completa de Angel (Synthesis + Implementation + bitstream sobre
+`system_bd_wrapper`), con el IP `cnn_top` **borrado y re-empaquetado desde
+cero** (`cnn_top_3_0`) para arrastrar el RTL actualizado. Incluye los cuatro
+fixes de la auditoría: Opción 1b de empaquetado en DDR (`ddr_addr_gen.vhd`),
+tope de frontera de 4 KB y guarda anti-ráfaga-fantasma en los dos masters AXI4,
+y el `ceil` de `gap_burst_words` en `GAP_FLUSH`.
+
+| Fecha | Periodo constreñido | WNS (post-ruteo) | Camino crítico | Notas |
+|---|---|---|---|---|
+| **2026-09-08** | **14.285 ns (70.004 MHz, `clk_fpga_0`)** | **+0.268 ns** | `axi_slave/r04_mode_reg → addr_generator (addr_in) → IFBuffer (RAMB36 ADDR)` — **vuelve el de siempre** | **PASA — 0 endpoints fallando de 22070.** WHS=+0.044 ns, WPWS=+6.012 ns. Un solo dominio de reloj, sin rastro del `.xdc` fantasma de la vez pasada. |
+
+**Recursos**: LUT 10492 (19.72%), FF 4457 (4.19%), BRAM 105 tiles (75.00%),
+DSP 54 (24.55%).
+
+### El camino crítico volvió a su lugar histórico
+
+La corrida del 2026-09-02 mostraba `reg_bank → ddr_addr_gen →
+axi4_read_master` como crítico. **Eso era transitorio.** Con la Opción 1b,
+`row_stride_in`/`row_stride_out` pasaron de multiplicar por `cin`/`cout`
+crudos (7 bits arbitrarios) a multiplicar por `cin_groups·16` /
+`cout_groups·16` — un operando de 3 bits significativos desplazado. Vivado
+movió **2 multiplicaciones de fabric a DSP48** (52 → 54 DSP) y ese camino dejó
+de ser el peor.
+
+El crítico vuelve a ser el histórico desde 2026-08-04:
+`axi_slave/r04_mode_reg → addr_generator → IFBuffer`. Es
+**dominado por ruteo, no por lógica**: 8.248 ns de ruteo contra 4.933 ns de
+lógica (62.6% / 37.4%), con sólo 14 niveles lógicos. Eso apunta a congestión y
+fanout, no a profundidad combinacional.
+
+### Los 6 peores caminos terminan en el IFBuffer — 4 de ellos en `buf_b`
+
+| Slack | Destino |
+|---|---|
+| +0.268 ns | `inst_if_buf/buf_b/buf_inputf_b_reg_29/ADDRBWRADDR[14]` |
+| +0.302 ns | `inst_if_buf/buf_b/buf_inputf_b_reg_19/ADDRBWRADDR[14]` |
+| +0.315 ns | `inst_if_buf/buf_b/buf_inputf_b_reg_29/ADDRBWRADDR[13]` |
+| +0.335 ns | `inst_if_buf/buf_a/buf_inputf_a_reg_29/ADDRBWRADDR[14]` |
+| +0.337 ns | `inst_if_buf/buf_b/buf_inputf_b_reg_25/ADDRBWRADDR[14]` |
+| +0.355 ns | `inst_if_buf/buf_a/buf_inputf_a_reg_21/ADDRBWRADDR[14]` |
+
+Todos salen del **mismo** registro origen (`r04_mode_reg[1]`, o sea `REG_MODE`)
+y llegan a los puertos de dirección de las BRAM del IFBuffer. La señal
+`ag_addr_in` (13 bits) alimenta **los dos bancos**, o sea ~64 RAMB36 de carga.
+
+**Consecuencia práctica**: `inputf_buf_b` —el banco que hoy nunca se escribe
+(ver `../dma/docs/pipelining_tradeoffs.md`)— **sí participa del camino
+crítico**, contra lo que se afirmó al decidir dejarlo el 2026-09-08. No es la
+causa (el origen y la lógica son los mismos para ambos bancos), pero duplica
+el fanout de `ag_addr_in` y aporta los peores destinos. Eliminarlo llevaría el
+WNS a alrededor de **+0.335 ns** (el peor camino que quedaría, sobre `buf_a`),
+o sea **~+0.067 ns**, más lo que aporte descomprimir el ruteo al bajar la BRAM
+de 75% a ~52%. Es una ganancia real pero modesta; no invierte por sí sola la
+decisión de conservar el banco, pero sí corrige el argumento con que se tomó.
+
+### Fmax
+
+Con `WNS = +0.268 ns` sobre un periodo de 14.285 ns, este punto implica
+`Fmax ≥ 1 / (14.285 − 0.268) ≈ **71.3 MHz**`. Es una **cota inferior**: la
+herramienta deja de optimizar en cuanto cumple el constraint. El punto de
+75 MHz del 2026-08-04 (que cerró con `+0.232 ns`) sigue siendo la mejor
+referencia de techo real (~76-77 MHz), aunque es anterior a los fixes de
+septiembre y habría que rehacerlo para confirmarlo.
+
+**Margen sobre el objetivo: 1.9%.** Sigue cumpliendo con 0 endpoints fallando,
+pero es el margen más ajustado registrado en el proyecto real. Si se agregan
+más cambios en la zona de `addr_generator`/IFBuffer conviene re-verificar
+timing antes de darlos por cerrados.

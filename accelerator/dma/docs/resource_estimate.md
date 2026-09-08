@@ -17,7 +17,9 @@ Tras el rediseño de `dma/ifbuffer_padding_redesign.md` (ADDR_WIDTH del IFBuffer
 | Block RAM Tile | **69.29% (97 / 140)** | **+25 pp** — el salto real fue mayor al estimado (~60-65%) |
 | DSP | 7.27% (16 / 220) | sin cambio — el padding no toca los MACs |
 
-El salto de BRAM (35 bloques adicionales, todos atribuibles a duplicar la profundidad del IFBuffer ping-pong) confirma que el IFBuffer es, por mucho, el mayor consumidor de BRAM del acelerador — mas grande de lo que se habia proyectado. Quedan 43 bloques de margen (30.71%) antes de llegar al limite del chip.
+El salto de BRAM (35 bloques adicionales, todos atribuibles a duplicar la profundidad de los dos bancos del IFBuffer) confirma que el IFBuffer es, por mucho, el mayor consumidor de BRAM del acelerador — mas grande de lo que se habia proyectado. Quedan 43 bloques de margen (30.71%) antes de llegar al limite del chip.
+
+> **Nota agregada 2026-09-08:** los dos bancos (`inputf_buf_a` / `inputf_buf_b`) estan instanciados, pero **el banco B nunca se escribe** — no hay ping-pong funcionando hoy. Es hardware provisionado para el prefetch futuro, con el control todavia sin escribir. Ver `pipelining_tradeoffs.md` para el detalle y la decision de dejarlo asi.
 
 ## Estimado del DMA completo
 
@@ -90,6 +92,52 @@ Confirmado: el wrapper no agrega practicamente nada, tal como se predijo. Los 20
 
 **Nota sobre `mac_dsp.xdc`**: la constraint que fuerza `USE_DSP48` en el MAC vivia solo en una carpeta local (`Downloads`, fuera del repo) y no estaba trackeada en git — al pasar `cnn_accelerator` a ser un nivel mas profundo dentro de `cnn_top`, la ruta jerarquica fija del constraint (`inst_mac_array/gen_macs[*].mac_inst/accumulator_reg[*]`, sin comodin al inicio) dejo de matchear y los 16 DSP del MAC desaparecieron silenciosamente (solo 4 DSP en el primer intento de sintesis de `cnn_top`, subieron LUTs a 20.22% al compensar en fabric). Fix: agregar `*` al inicio del patron (`*inst_mac_array/...`) para que sea independiente de cuantos niveles de jerarquia haya encima, y mover el archivo al repo.
 
-## Pendiente
+## Sistema completo implementado — MEDIDO (bitstream generado, 2026-09-08)
 
-`cnn_top` completo y sintetizado. Siguiente: Block Design de Vivado (PS7 + AXI-Lite + AXI-HP + IRQ), conectando `cnn_top` al procesador.
+Ya con el Block Design cerrado (PS7 + AXI-Lite x2 + AXI-HP + 4 protocol
+converters), el IP `cnn_top` re-empaquetado desde cero e implementado con
+place & route hasta bitstream:
+
+| Recurso | Uso | Disponible |
+|---|---|---|
+| Slice LUTs | **19.72%** (10,492 / 53,200) | amplio |
+| Slice Registers (FF) | **4.19%** (4,457 / 106,400) | amplio |
+| Block RAM Tile | **75.00%** (105 / 140) | 35 bloques |
+| DSP | **24.55%** (54 / 220) | amplio |
+
+Timing cerrado a 70 MHz con **WNS = +0.268 ns**, 0 endpoints fallando de
+22,070. El camino critico es `axi_slave (REG_MODE) -> addr_generator (addr_in)
+-> IFBuffer (RAMB36 ADDR)`, dominado por **ruteo** (62.6%) y no por logica —
+ver `../../constraints/timing_analysis.md` para el detalle y los 6 peores
+caminos.
+
+Los 2 DSP nuevos (52 -> 54) los gano la Opcion 1b: al multiplicar por
+`cin_groups*16` en vez de por `cin` crudo, Vivado movio dos multiplicaciones
+de `ddr_addr_gen` de fabric a DSP48 — y de paso ese camino dejo de ser el
+critico.
+
+BRAM subio de 97 a 105 bloques respecto de la sintesis de `cnn_top` de julio,
+por el `bias_buf` y el buffer de fila del `max_pool` agregados en agosto, y se
+mantiene en 105 desde entonces.
+Sigue siendo, por lejos, el recurso mas ajustado, y **~32 de esos 105 bloques
+son `inputf_buf_b`**, que hoy no se usa (estimacion analitica:
+8192 palabras x 128 bits = 1 Mbit ≈ 32 RAMB36; consistente con el total
+medido). Eliminarlo bajaria el uso a ~52%; la decision de 2026-09-08 fue
+dejarlo — ver `pipelining_tradeoffs.md`. **Ojo:** la corrida del 2026-09-08
+mostro que ese banco si aparece en el camino critico (4 de los 6 peores
+caminos terminan en el), asi que quitarlo ademas daria ~+0.067 ns de WNS.
+
+## Costo de transferencia — MEDIDO (2026-09-08)
+
+El pendiente que dejaba `pipelining_tradeoffs.md` ("medir en simulacion el
+tiempo real de transferencia por tile") quedo cerrado:
+
+- `axi4_read_master`: **3 ciclos por rafaga + 2 ciclos por palabra** de 128
+  bits (1 beat/ciclo, practicamente optimo para el bus de 64 bits).
+- `axi4_write_master`: **3 ciclos por palabra** (1.5 ciclos/beat) — su lazo
+  `RD_LOCAL -> W_LOW -> W_HIGH` gasta un ciclo esperando el OFBuffer.
+
+Una inferencia completa son **6,960,199 ciclos = 99.4 ms @ 70 MHz ≈ 10.1 fps**,
+repartidos en 79.8% computo, 10.8% transferencia de IFM y 9.4% de OFM. El
+catalogo de optimizaciones posibles, con su costo y ganancia cuantificados,
+esta en `../../cnn_accelerator/docs/inference_speed_roadmap.md`.
