@@ -265,14 +265,14 @@ architecture Behavioral of tb_cnn_top_stride is
         -- CASO G ( PW1x1, Cin=24, verificacion del fix de cin_groups en el
         -- LADO DE LECTURA -- 1 fila, 2 columnas ). Pixel0: canales 0-15 = 1,
         -- canales 16-23 = 2. Pixel1: canales 0-15 = 3, canales 16-23 = 4.
-        -- Base IN word 47616 ( addr 0x5D000 ). Empaquetado denso ( Cin=24
-        -- bytes reales por pixel, sin relleno en DDR -- ver row_stride_in
-        -- := img_w*cin en ddr_addr_gen.vhd ): pixel0 ocupa bytes 0-23,
-        -- pixel1 bytes 24-47 relativos a la base.
+        -- Base IN word 47616 ( addr 0x5D000 ). Empaquetado RELLENO
+        -- ( cin_groups*16 = 32 bytes por pixel -- ver row_stride_in
+        -- := img_w*cin_groups*16 en ddr_addr_gen.vhd ): pixel0 ocupa
+        -- bytes 0-31 ( 24 reales + 8 de relleno ), pixel1 bytes 32-63.
         47616 => x"0101010101010101", 47617 => x"0101010101010101",
         47618 => x"0202020202020202",
-        47619 => x"0303030303030303", 47620 => x"0303030303030303",
-        47621 => x"0404040404040404",
+        47620 => x"0303030303030303", 47621 => x"0303030303030303",
+        47622 => x"0404040404040404",
         -- CASO G, bias = 0 ( addr 0x5F800, word 48896 ).
         48896 => x"0000000000000000", 48897 => x"0000000000000000",
         48898 => x"0000000000000000", 48899 => x"0000000000000000",
@@ -304,18 +304,21 @@ architecture Behavioral of tb_cnn_top_stride is
         -- el gap de empaquetado denso del Caso G TAMBIEN afecta a Conv3x3
         -- con Cin=3 real, no solo a PW1x1 con Cin=24 ). Activacion varia
         -- por columna: col0=col1=3, col2=col3=9 ( igual estilo que Caso B ).
-        -- Empaquetado denso: 3 bytes/pixel, sin relleno. Base IN word 51200
-        -- ( addr 0x64000 ). DDR bytes absolutos 0-7 = [3,3,3,3,3,3,9,9]
-        -- (pixel0=bytes0-2, pixel1=bytes3-5, pixel2 empieza en byte6).
-        51200 => x"0909030303030303",
-        -- DDR bytes absolutos 8-15 = [9,9,9,9,0,0,0,0] (resto de pixel2 en
-        -- byte8, pixel3=bytes9-11, byte12+ fuera de imagen real).
-        51201 => x"0000000009090909",
-        -- CASO F2, bias = 0 ( addr 0x64800, word 51328 ).
-        51328 => x"0000000000000000", 51329 => x"0000000000000000",
-        51330 => x"0000000000000000", 51331 => x"0000000000000000",
-        51332 => x"0000000000000000", 51333 => x"0000000000000000",
-        51334 => x"0000000000000000", 51335 => x"0000000000000000",
+        -- Empaquetado RELLENO: cin_groups*16 = 16 bytes/pixel ( 3 reales +
+        -- 13 de relleno ). Base IN word 51200 ( addr 0x64000 ). Cada pixel
+        -- arranca en una word par: pixel0 en 51200, pixel1 en 51202,
+        -- pixel2 en 51204, pixel3 en 51206. Solo los bytes 0-2 de cada uno
+        -- se leen ( Cin=3 ), el resto es relleno que nadie mira.
+        51200 => x"0000000000030303", 51202 => x"0000000000030303",
+        51204 => x"0000000000090909", 51206 => x"0000000000090909",
+        -- CASO F2, bias = 0 ( addr 0x64800, word 51456 -- 0x64800/8. La
+        -- version vieja decia 51328, que es 0x64400: el bias caia sobre el
+        -- relleno por defecto 0x01010101 y el Caso F2 saturaba a 0x7F sin
+        -- importar el datapath. Bug del testbench, no del RTL ).
+        51456 => x"0000000000000000", 51457 => x"0000000000000000",
+        51458 => x"0000000000000000", 51459 => x"0000000000000000",
+        51460 => x"0000000000000000", 51461 => x"0000000000000000",
+        51462 => x"0000000000000000", 51463 => x"0000000000000000",
 
         -- CASO H2 ( PW1x1, Cin=16, Cout=24, 1 fila x 2 COLUMNAS -- ver si
         -- el gap de empaquetado denso TAMBIEN afecta la escritura de OFM
@@ -900,9 +903,9 @@ begin
         check( ddr_mem( 50177 ), x"2020202020202020", "CasoH fila0 canales 8-15 = 32" );
         check( ddr_mem( 50178 ), x"2020202020202020", "CasoH fila0 canales 16-23 = 32" );
         report "--- fila1 (activacion=5): 16*5=80 (si cout_groups estuviera mal, leeria datos de fila0 aqui) ---";
-        check( ddr_mem( 50179 ), x"5050505050505050", "CasoH fila1 canales 0-7 = 80" );
-        check( ddr_mem( 50180 ), x"5050505050505050", "CasoH fila1 canales 8-15 = 80" );
-        check( ddr_mem( 50181 ), x"5050505050505050", "CasoH fila1 canales 16-23 = 80" );
+        check( ddr_mem( 50180 ), x"5050505050505050", "CasoH fila1 canales 0-7 = 80" );
+        check( ddr_mem( 50181 ), x"5050505050505050", "CasoH fila1 canales 8-15 = 80" );
+        check( ddr_mem( 50182 ), x"5050505050505050", "CasoH fila1 canales 16-23 = 80" );
         ack_dma_done;
         report "=== CASO H: ver arriba OK/FALLO (cout_groups = ceil(24/16) = 2, 2 filas) ===";
 
@@ -925,9 +928,9 @@ begin
         check( ddr_mem( 53248 ), x"2020202020202020", "CasoH2 col0 canales 0-7 = 32" );
         check( ddr_mem( 53249 ), x"2020202020202020", "CasoH2 col0 canales 8-15 = 32" );
         check( ddr_mem( 53250 ), x"2020202020202020", "CasoH2 col0 canales 16-23 = 32" );
-        check( ddr_mem( 53251 ), x"5050505050505050", "CasoH2 col1 canales 0-7 = 80" );
-        check( ddr_mem( 53252 ), x"5050505050505050", "CasoH2 col1 canales 8-15 = 80" );
-        check( ddr_mem( 53253 ), x"5050505050505050", "CasoH2 col1 canales 16-23 = 80" );
+        check( ddr_mem( 53252 ), x"5050505050505050", "CasoH2 col1 canales 0-7 = 80" );
+        check( ddr_mem( 53253 ), x"5050505050505050", "CasoH2 col1 canales 8-15 = 80" );
+        check( ddr_mem( 53254 ), x"5050505050505050", "CasoH2 col1 canales 16-23 = 80" );
         ack_dma_done;
         report "=== CASO H2: ver arriba OK/FALLO (busca el gap del Caso G del lado de escritura, con columnas) ===";
 

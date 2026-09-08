@@ -33,7 +33,7 @@ struct layer_config_t {
     uint8_t     dma_tile_h;
     uint8_t     dma_num_tile_x;
     uint8_t     dma_num_tile_y;
-    uint8_t     dma_weight_words;
+    uint16_t    dma_weight_words;
     uint8_t     dma_bias_words;
     uint32_t    dma_addr_w;
     uint32_t    dma_addr_in;

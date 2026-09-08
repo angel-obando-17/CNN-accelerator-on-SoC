@@ -83,12 +83,12 @@ begin
         variable row_words_padded : unsigned( 15 downto 0 ); -- ( tile_w + 2 ) * cin_groups.
         variable r_global         : unsigned( 15 downto 0 );
         variable col_ddr_start    : unsigned( 15 downto 0 );
-        variable row_stride_in    : unsigned( 15 downto 0 ); -- img_w * cin.
+        variable row_stride_in    : unsigned( 15 downto 0 ); -- img_w * cin_groups * 16.
 
         -- OFM / Residual.
         variable row_words_out  : unsigned( 15 downto 0 ); -- tile_w_out * cout_groups.
         variable r_global_out   : unsigned( 15 downto 0 );
-        variable row_stride_out : unsigned( 15 downto 0 ); -- img_w_out * cout.
+        variable row_stride_out : unsigned( 15 downto 0 ); -- img_w_out * cout_groups * 16.
 
         -- DDR terms.
         variable term1 : unsigned( 31 downto 0 );
@@ -196,9 +196,9 @@ begin
                         local_addr    <= std_logic_vector( resize( v_r_local * row_words_padded, 13 ) );
                     end if;
 
-                    row_stride_in := resize( v_img_w * unsigned( cin ), 16 );
+                    row_stride_in := resize( v_img_w * shift_left( cin_groups, 4 ), 16 );
                     term1 := resize( r_global * row_stride_in, 32 );
-                    term2 := resize( col_ddr_start * unsigned( cin ), 32 );
+                    term2 := resize( col_ddr_start * shift_left( cin_groups, 4 ), 32 );
                     ddr_addr <= std_logic_vector( unsigned( addr_in ) + term1 + term2 );
                 end if;
 
@@ -206,9 +206,9 @@ begin
             when "001" | "011" =>
                 row_words_out  := resize( tile_w_out * cout_groups, 16 );
                 r_global_out   := resize( v_tile_y * tile_h_out, 16 ) + v_r_local;
-                row_stride_out := resize( img_w_out * unsigned( cout ), 16 );
+                row_stride_out := resize( img_w_out * shift_left( cout_groups, 4 ), 16 );
                 term1 := resize( r_global_out * row_stride_out, 32 );
-                term2 := resize( resize( v_tile_x * tile_w_out, 16 ) * unsigned( cout ), 32 );
+                term2 := resize( resize( v_tile_x * tile_w_out, 16 ) * shift_left( cout_groups, 4 ), 32 );
 
                 if( transfer_type = "001" ) then
                     ddr_addr <= std_logic_vector( unsigned( addr_out ) + term1 + term2 );
