@@ -280,6 +280,12 @@ def main(
         manifest_path : str = "CNN/results/ptq_simple_v2/weights_manifest.json"
     ) -> None:
 
+    repo_root = os.path.dirname( os.path.dirname( os.path.dirname( __file__ ) ) )
+
+    keras_path = os.path.join( repo_root, keras_path )
+    params_path = os.path.join( repo_root, params_path )
+    manifest_path = os.path.join( repo_root, manifest_path )
+
     geometry = load_model_geometry( keras_path )
     params = load_quant_params( params_path )
     manifest = load_weights_manifest( manifest_path )
