@@ -48,7 +48,8 @@ entity axi_lite_slave is
         relu6_val        : out std_logic_vector( 7 downto 0 );
         mult             : out std_logic_vector( 15 downto 0 );
         gap_shift        : out std_logic_vector( 4 downto 0 );
-        stride_en        : out std_logic
+        stride_en        : out std_logic;
+        relu_en          : out std_logic
     );
 end axi_lite_slave;
 
@@ -86,6 +87,7 @@ architecture Behavioral of axi_lite_slave is
     signal r38_gap_shift    : std_logic_vector( 4 downto 0 );
     signal r3c_mult         : std_logic_vector( 15 downto 0 );  -- M0 en Q0.16, ver requantization_analysis.md.
     signal r44_stride_en    : std_logic;
+    signal r48_relu_en      : std_logic;
     
 begin
 
@@ -115,6 +117,7 @@ begin
                 r38_gap_shift    <= ( others => '0' );
                 r3c_mult         <= ( others => '0' );
                 r44_stride_en    <= '0';
+                r48_relu_en      <= '0';
                 sig_b_valid      <= '0';
 
             else
@@ -158,7 +161,9 @@ begin
                         when "0111100" =>
                             r3c_mult         <= axi_w_data( 15 downto 0 );
                         when "1000100" =>
-                            r44_stride_en    <= axi_w_data( 0 );                     
+                            r44_stride_en    <= axi_w_data( 0 );
+                        when "1001000" =>
+                            r48_relu_en      <= axi_w_data( 0 );                  
                         when others => null;
                     end case;
                 end if;
@@ -226,6 +231,8 @@ begin
                             sig_r_data <= ( 31 downto  1 => '0' ) & reg_done;
                         when "1000100" =>
                             sig_r_data <= ( 31 downto  1 => '0' ) & r44_stride_en;
+                        when "1001000" =>
+                            sig_r_data <= ( 31 downto  1 => '0' ) & r48_relu_en;                        
                         when others =>
                             sig_r_data <= ( others => '0' );     
                     end case;
@@ -269,5 +276,6 @@ begin
     mult             <= r3c_mult;
     gap_shift        <= r38_gap_shift;
     stride_en        <= r44_stride_en;
+    relu_en          <= r48_relu_en; 
     
 end Behavioral;

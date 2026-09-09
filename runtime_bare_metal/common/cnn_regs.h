@@ -23,5 +23,6 @@
 #define REG_MULT            0x3C /* [ 15:0 ] */
 #define REG_DONE            0x40 /* [ 0 ]    */
 #define REG_STRIDE_EN		0x44 /* [ 0 ]    */
+#define REG_RELU_EN			0x48 /* [ 0 ] 	 */
 
 #endif

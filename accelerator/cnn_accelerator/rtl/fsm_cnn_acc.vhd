@@ -16,6 +16,7 @@ entity fsm_cnn_accelerator is
         tile_boundary    : in std_logic;
         tile_ready       : in std_logic;
         reg_has_residual : in std_logic;
+        reg_relu_en      : in std_logic;
         gap_done         : in std_logic;
         
         -- Output signals.
@@ -68,6 +69,7 @@ begin
         tile_boundary,
         tile_ready,
         reg_has_residual,
+        reg_relu_en,
         gap_done 
     )
     begin
@@ -129,7 +131,7 @@ begin
                 next_state <= POST;
 
             when POST =>
-                relu_en  <= '1';
+                relu_en  <= reg_relu_en;
                 quant_en <= '1';
                 addr_en  <= '1';
                 mac_en   <= mac_valid;

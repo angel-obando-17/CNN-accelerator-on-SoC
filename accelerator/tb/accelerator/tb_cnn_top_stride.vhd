@@ -163,7 +163,7 @@ architecture Behavioral of tb_cnn_top_stride is
 
     signal dma_done : std_logic;
 
-    constant DDR_WORDS : integer := 54528;
+    constant DDR_WORDS : integer := 57600;
     type ddr_mem_array is array( 0 to DDR_WORDS - 1 ) of std_logic_vector( 63 downto 0 );
 
     signal ddr_mem : ddr_mem_array := (
@@ -335,6 +335,13 @@ architecture Behavioral of tb_cnn_top_stride is
         53770 => x"0000000000000000", 53771 => x"0000000000000000",
         53772 => x"0000000000000000", 53773 => x"0000000000000000",
         53774 => x"0000000000000000", 53775 => x"0000000000000000",
+
+        -- CASO I ( relu_en=0, capa lineal ): bias = -40 en int32 ( 0xFFFFFFD8 )
+        -- para los 16 canales ( base 0x6F800/8 = 57088, 4 palabras de 128 bits ).
+        57088 => x"FFFFFFD8FFFFFFD8", 57089 => x"FFFFFFD8FFFFFFD8",
+        57090 => x"FFFFFFD8FFFFFFD8", 57091 => x"FFFFFFD8FFFFFFD8",
+        57092 => x"FFFFFFD8FFFFFFD8", 57093 => x"FFFFFFD8FFFFFFD8",
+        57094 => x"FFFFFFD8FFFFFFD8", 57095 => x"FFFFFFD8FFFFFFD8",
 
         others => x"0101010101010101" );
 
@@ -580,6 +587,12 @@ begin
             axi_write_accel( 52, x"0000007F" ); -- RELU6_VAL = 127 ( override despues si hace falta ).
             axi_write_accel( 56, std_logic_vector( to_unsigned( gap_shift_v, 32 ) ) );
             axi_write_accel( 60, x"0000FFFF" ); -- REG_MULT ~= 1.0 ( no-op ), este tb no prueba el multiplicador.
+            -- REG_RELU_EN ( 0x48 ) = 1 por defecto. Registro agregado 2026-09-08:
+            -- antes relu_en estaba cableado a '1' en el POST de fsm_cnn_acc.vhd,
+            -- sin registro para apagarlo. Al volverlo configurable su valor de
+            -- reset es 0, asi que hay que pedir la ReLU6 explicitamente. El
+            -- Caso I lo sobreescribe a 0 para probar una capa lineal.
+            axi_write_accel( 72, x"00000001" );
         end procedure;
 
         -- Standard config of DMA for tile NxN, CON bias. DMA_COUT queda en
@@ -933,6 +946,33 @@ begin
         check( ddr_mem( 53254 ), x"5050505050505050", "CasoH2 col1 canales 16-23 = 80" );
         ack_dma_done;
         report "=== CASO H2: ver arriba OK/FALLO (busca el gap del Caso G del lado de escritura, con columnas) ===";
+
+        -- CASO I: relu_en = 0, capa LINEAL con salida negativa.
+        -- Las 9 capas `_pw` del modelo real ( los linear bottlenecks de
+        -- MobileNetV2 ) llevan relu_en=False en layer_quant_params.json: sus
+        -- salidas negativas son parte del resultado, no ruido. Hasta el
+        -- 2026-09-08 el hardware tenia relu_en cableado a '1' en el estado POST
+        -- de fsm_cnn_acc.vhd y NO habia registro para apagarlo -- toda salida
+        -- negativa se aplastaba a cero y no habia forma de expresarlo desde el
+        -- PS. Peor: con el relu6_val=0 que trae el JSON para esas capas, la
+        -- salida entera habria sido cero. Este caso ejercita REG_RELU_EN (0x48).
+        -- PW1x1, Cin=16, pesos y activacion por defecto (=1) -> sum = 16.
+        -- bias = -40 -> acc = -24. mult=0xFFFF, shift=0 -> ( -24*65535 + 32768 )
+        -- >> 16 = -24 = 0xE8. Con relu_en=1 saldria 0x00; con relu_en=0, 0xE8.
+        report "--- CASO I: relu_en=0, capa lineal con salida NEGATIVA ---";
+        cfg_accel( "10", 16, 1, 1, 0, 0, 0, 0, 0 );
+        axi_write_accel( 72, x"00000000" ); -- REG_RELU_EN = 0 ( capa lineal ).
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 ( explicito ).
+        cfg_dma( 2, 0, 16, 16#6C000#, 16#6D000#, 16#6E000#, 16#6F000#, 0, 0, 4, 16#6F800# );
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 ( explicito ).
+        run_layer_and_ack;
+
+        check( ddr_mem( 56320 ), x"E8E8E8E8E8E8E8E8", "CasoI pixel(0,0) = -24 (sum 16 + bias -40, sin ReLU)" );
+        check( ddr_mem( 56322 ), x"E8E8E8E8E8E8E8E8", "CasoI pixel(0,1) = -24" );
+        check( ddr_mem( 56324 ), x"E8E8E8E8E8E8E8E8", "CasoI pixel(1,0) = -24" );
+        check( ddr_mem( 56326 ), x"E8E8E8E8E8E8E8E8", "CasoI pixel(1,1) = -24" );
+        ack_dma_done;
+        report "=== CASO I: ver arriba OK/FALLO (relu_en=0 preserva los negativos) ===";
 
         report "=== RESUMEN: " & integer'image( errors ) & " fallo(s) ===" severity note;
         if( errors = 0 ) then

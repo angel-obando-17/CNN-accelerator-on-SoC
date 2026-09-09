@@ -11,6 +11,7 @@ struct layer_config_t {
     bool        common_has_residual;
     bool        common_pool_en;
     bool		common_stride_en;
+    bool		common_relu_en;
     bool        common_pool_type;
 
     /* CNN registers. */

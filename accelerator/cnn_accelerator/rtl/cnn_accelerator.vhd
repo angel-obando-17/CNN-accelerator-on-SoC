@@ -25,6 +25,7 @@ entity cnn_accelerator is
         mult               : in std_logic_vector( 15 downto 0 ); -- To quant_relu
         gap_shift          : in std_logic_vector( 4 downto 0 ); -- To gap_unit
         stride_en          : in std_logic;
+        relu_en            : in std_logic;
         tile_ready         : in std_logic;
         -- DMA - IFBuffer.
         buf_sel            : in std_logic;
@@ -212,6 +213,7 @@ begin
             layer_done       => ag_layer_done,
             tile_boundary    => ag_tile_boundary,
             reg_has_residual => reg_has_residual,
+            reg_relu_en      => relu_en,
             gap_done         => pool_gap_done,
             acc_clear        => sig_acc_clear,
             addr_en          => sig_addr_en,

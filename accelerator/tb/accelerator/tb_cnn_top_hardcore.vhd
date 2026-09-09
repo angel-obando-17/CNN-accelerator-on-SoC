@@ -478,6 +478,12 @@ begin
             -- testbench sigue siendo sobre bias/pool/etc, no sobre el
             -- multiplicador (ese se prueba aparte, con M0 no trivial).
             axi_write_accel( 60, x"0000FFFF" );
+            -- REG_RELU_EN ( 0x48 ) = 1 por defecto. Registro agregado 2026-09-08:
+            -- antes relu_en estaba cableado a '1' en el POST de fsm_cnn_acc.vhd y
+            -- no habia forma de apagarlo. Al hacerlo configurable, su valor de
+            -- reset pasa a ser 0, asi que TODOS los casos que dependen de la
+            -- ReLU6 ( ej. Caso I ) tienen que pedirla explicitamente.
+            axi_write_accel( 72, x"00000001" );
         end procedure;
 
         -- Standard config of DMA for tile NxN, CON bias. DMA_COUT queda en
