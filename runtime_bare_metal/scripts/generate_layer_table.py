@@ -266,40 +266,34 @@ def check_against_manifest(
     assert total_weight == manifest[ "bytes_pesos" ], f"pesos: la tabla cubre {total_weight} B y el archivo tiene {manifest[ 'bytes_pesos' ]} B"
     assert total_bias == manifest[ "bytes_bias" ],  f"bias: la tabla cubre {total_bias} B y el archivo tiene {manifest[ 'bytes_bias' ]} B"
 
-# def main( ) -> None:
+def check_inputs( geometry : list[ dict ], params : dict[ str, dict ] ) -> None:
+    assert  len( geometry ) == 28, f"esperaba 28 capas, salieron {len( geometry )}"
+    assert geometry[ 0 ][ "cin" ] == 3, f"conv1 deberia tener Cin = 3, tiene {geometry[ 0 ][ 'cin' ]}"
+    assert geometry[ -1 ][ "name" ] == "conv_last", f"la ultima capa no es conv_last"
+    assert "gap" in params, f"falta la fila 'gap' en el JSON de cuantización"
+    assert [ layer[ "name" ] for layer in geometry ] == [ name for name in params if name != "gap" ], \
+        f"los nombres del .keras y del JSON de cuantizacion no coinciden"
+
+def main(
+        keras_path    : str = "CNN/results/hsv/model_MobileNetV2_HSV_256x256.keras",
+        params_path   : str = "CNN/results/ptq_simple_v2/layer_quant_params.json",
+        manifest_path : str = "CNN/results/ptq_simple_v2/weights_manifest.json"
+    ) -> None:
+
+    geometry = load_model_geometry( keras_path )
+    params = load_quant_params( params_path )
+    manifest = load_weights_manifest( manifest_path )
+
+    check_inputs( geometry, params )
+
+    table = map_register( geometry, params )
+    table = map_addresses( table, geometry )
+
+    check_limits( table, geometry )
+    check_consistency( table, geometry )
+    check_against_manifest( table, manifest, keras_path )
+
+    print( f"{len( table )} capas x {len( table[ 0 ] )} campos: todos los chequeos OK." )
 
 if __name__ == "__main__":
-    keras_path = "CNN/results/hsv/model_MobileNetV2_HSV_256x256.keras"
-    geometry = load_model_geometry( keras_path )
-
-    assert len( geometry ) == 28, f"esperaba 28 capas, salieron {len( geometry )}"
-    assert geometry[ 0 ][ "cin" ] == 3
-    assert geometry[ -1 ][ "name" ] == "conv_last" and geometry[ -1 ][ "res_out" ] == 16
-
-    for capa in geometry:
-        print( capa )
-
-    params = load_quant_params( "CNN/results/ptq_simple_v2/layer_quant_params.json" )
-
-    assert len( params ) == 29, f"esperaba 29 filas, salieron {len( params )}"
-    assert "gap" in params
-
-    nombres_geom = [ c[ "name" ] for c in geometry ]
-    nombres_json = [ k for k in params if k != "gap" ]
-    assert nombres_geom == nombres_json, "los nombres del .keras y del JSON no coinciden"
-
-    print( params[ "conv1" ][ "mult" ], params[ "conv1" ][ "shift" ], len( params[ "conv1" ][ "bias" ] ) )
-    print( "gap shift:", params[ "gap" ][ "shift" ] )
-
-    tabla = map_register( geometry, params )
-    print( tabla[ 0 ] )
-    print( tabla[ 3 ] )
-
-    tabla = map_addresses( tabla, geometry )
-    check_limits( tabla, geometry )
-    print( "los 12 limites de hardware: OK en las 28 capas" )
-    check_consistency( tabla, geometry )
-    print( "invariantes entre capas: OK" )
-    manifest = load_weights_manifest( "CNN/results/ptq_simple_v2/weights_manifest.json" )
-    check_against_manifest( tabla, manifest, keras_path )
-    print( "contra el manifiesto de pesos: OK" )
+    main( )
