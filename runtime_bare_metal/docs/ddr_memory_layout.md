@@ -1,5 +1,10 @@
 # Layout de memoria DDR — política de asignación y mapa concreto
 
+> **Ver primero `system_memory_map.md`** para la partición del espacio de
+> direcciones completo (regiones de código de cada núcleo, OCM, registros de la
+> PL, arranque AMP y reglas de coherencia de cache). Este documento es el
+> detalle capa por capa de la arena de activaciones, pesos y bias.
+
 ## Decisión (2026-07-11): direcciones estáticas, sin reuso, v1
 
 Cada tensor de salida de cada capa del MobileNetV2 recibe una dirección
@@ -75,8 +80,14 @@ No, por tres razones:
 3. **El modelo de costo es del lado PL, no de la memoria.** Los 2
    ciclos/palabra son el ritmo del `axi4_read_master` (palabra de 128 bits
    sobre un puerto HP de 64 bits = 2 beats). A 70 MHz eso pide **553 MB/s**,
-   contra los ~4,2 GB/s de pico de la DDR3 de 32 bits a 533 MHz: la DDR tiene
-   entre 4 y 8 veces el ancho de banda que el puerto le puede pedir.
+   contra los **~2,1 GB/s** de pico de la DDR3 de esta placa (**bus de 16
+   bits** a 533 MHz, un solo `MT41K256M16` — verificado contra el esquemático
+   y contra la configuración del fabricante, ver `system_memory_map.md` §1.2):
+   la DDR tiene casi cuatro veces el ancho de banda que el puerto le puede
+   pedir.
+
+   *(Corregido el 2026-09-10: acá decía ~4,2 GB/s, calculado sobre un bus de
+   32 bits que la placa no tiene. La conclusión no cambia.)*
 
 De hecho, a 553 MB/s el DMA está **saturando el puerto AXI-HP** (8 B/ciclo x
 70 MHz = 560 MB/s de tope). El cuello de botella es el reloj de la PL, no la

@@ -170,7 +170,7 @@ def emit_layer_table( table : list[ dict ], keras_path : str, out_path : str ) -
     with open( out_path, "w" ) as file:
         file.write( 
 f"""/*
- * layer_table.c - Configuration of the 28 CNN layers.
+ * layer_table.c - Configuration of the {len( table )} CNN layers.
  *
  * AUTOMATICALLY GENERATED FILE - DO NOT EDIT MANUALLY.
  * Any changes made here will be lost during the next generator run.
