@@ -5,6 +5,8 @@
 #include <stddef.h>
 
 #define OCM_MAILBOX_BASE	0xFFFF0000u
+#define DDR_BASE_ADDRESS    0x00100000u
+#define DDR_TOP_ADDRESS		0x20000000u
 
 /* CPUs Masks */
 #define INTERCORE_CPU1_MASK	0x00000002u /* CPU1 Mask*/
@@ -13,6 +15,19 @@
 /* SGI IDs of GIC */
 #define SGI_CORE0_TO_CORE1	0x00000000u
 #define SGI_CORE1_TO_CORE0	0x00000001u
+
+enum status_t {
+	SEGMENTATION_DONE = 0,
+	IN_PROCESS,
+    FAIL_IN_NULL_POINTER = 10,
+	FAIL_OUT_NULL_POINTER,
+	FAIL_OUT_POINTER_OUT_OF_ZONE,
+	FAIL_NOT_ENOUGH_SPACE,
+	FAIL_OVERLAP_ZONES,
+	FAIL_FRAME_ID_REPEAT,
+    FAIL_OUT_NOT_ALIGNED_TO_16_BYTES,
+	WARNING_EMPTY_MASK = 20
+};
 
 struct ocm_mailbox_t {
 	volatile uint32_t frame_ready; /* Core0 -> Core1 */
