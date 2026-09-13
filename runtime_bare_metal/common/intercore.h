@@ -8,6 +8,12 @@
 #define DDR_BASE_ADDRESS    0x00100000u
 #define DDR_TOP_ADDRESS		0x20000000u
 
+#define RAW_IMAGE_ADDRESS   0x01100000u
+#define RAW_IMAGE_LENGTH	0x00030000u /* 256 x 256 x 3 = 192 KiB */
+
+#define PACKAGE_FRAME_ADDRESS 0x02000000u
+#define PACKAGE_FRAME_LENGTH  0x00100000u /* 256 x 256 x 16 = 1 MiB */
+
 /* CPUs Masks */
 #define INTERCORE_CPU1_MASK	0x00000002u /* CPU1 Mask*/
 #define INTERCORE_CPU0_MASK	0x00000001u /* CPU0 Mask*/
@@ -28,6 +34,8 @@ enum status_t {
     FAIL_OUT_NOT_ALIGNED_TO_16_BYTES,
 	WARNING_EMPTY_MASK = 20
 };
+
+#define FRAME_ID_NONE	0x0u
 
 struct ocm_mailbox_t {
 	volatile uint32_t frame_ready; /* Core0 -> Core1 */
@@ -54,5 +62,12 @@ STATIC_ASSERT( offsetof( struct ocm_mailbox_t, frame_ready ) == 0x00u );
 STATIC_ASSERT( offsetof( struct ocm_mailbox_t, seg_done ) == 0x04u );
 STATIC_ASSERT( offsetof( struct ocm_mailbox_t, frame_id ) == 0x08u );
 STATIC_ASSERT( offsetof( struct ocm_mailbox_t, status ) == 0x0Cu );
+
+STATIC_ASSERT( PACKAGE_FRAME_ADDRESS % 16 == 0 );
+STATIC_ASSERT( RAW_IMAGE_ADDRESS + RAW_IMAGE_LENGTH <= PACKAGE_FRAME_ADDRESS );
+STATIC_ASSERT( ( RAW_IMAGE_ADDRESS >= DDR_BASE_ADDRESS ) && \
+               ( PACKAGE_FRAME_ADDRESS >= DDR_BASE_ADDRESS ) );
+STATIC_ASSERT( ( RAW_IMAGE_ADDRESS + RAW_IMAGE_LENGTH <= DDR_TOP_ADDRESS ) && \
+			   ( PACKAGE_FRAME_ADDRESS + PACKAGE_FRAME_LENGTH <= DDR_TOP_ADDRESS ) );
 
 #endif
