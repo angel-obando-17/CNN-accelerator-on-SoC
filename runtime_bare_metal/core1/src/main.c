@@ -40,9 +40,11 @@ int main( void ) {
         while( 1 );
     
     Xil_ExceptionInit( );
-    Xil_ExceptionRegisterHandler( XIL_EXCEPTION_ID_INT, 
-                                  (Xil_ExceptionHandler) XScuGic_InterruptHandler,
-                                  &Gic_Handler );
+    Xil_ExceptionRegisterHandler( 
+        XIL_EXCEPTION_ID_INT, 
+        (Xil_ExceptionHandler) XScuGic_InterruptHandler,
+        &Gic_Handler 
+    );
 
     if( XScuGic_Connect( &Gic_Handler, SGI_CORE0_TO_CORE1, Interrupt_Handler, NULL ) != XST_SUCCESS )
         while( 1 );
