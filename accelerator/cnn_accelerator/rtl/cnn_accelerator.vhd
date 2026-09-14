@@ -135,6 +135,7 @@ architecture Behavioral of cnn_accelerator is
     -- ofbuf_wr_addr_reg. ag_co_counter en vivo ya avanzo al SIGUIENTE grupo
     -- para cuando el dato del grupo actual llega a pool_act/valid_in.
     signal co_counter_reg     : std_logic_vector( 1 downto 0 ) := ( others => '0' );
+    signal byte_sel_reg       : std_logic_vector( 3 downto 0 ) := ( others => '0' );
         
 begin
 
@@ -177,11 +178,13 @@ begin
     begin
         if rising_edge( clk ) then
             if( reset = '1' ) then
-                weight_reg <= ( others => ( others => '0' ) );
-                act_reg    <= ( others => ( others => '0' ) );
+                weight_reg   <= ( others => ( others => '0' ) );
+                act_reg      <= ( others => ( others => '0' ) );
+                byte_sel_reg <= ( others => '0' );
             elsif( sig_addr_en = '1' ) then
-                weight_reg <= weight_arr;
-                act_reg    <= mux_act_out;
+                weight_reg   <= weight_arr;
+                act_reg      <= mux_act_out;
+                byte_sel_reg <= ag_byte_sel;
             end if;
             quant_valid_prev  <= quant_valid;
             if( sig_acc_bank_en = '1' ) then
@@ -281,7 +284,7 @@ begin
     inst_input_mux : entity work.input_mux
         port map(
             data_in         => ifbuf_data_out,
-            byte_sel        => ag_byte_sel,
+            byte_sel        => byte_sel_reg,
             reg_mode        => reg_mode,
             data_out        => mux_act_out
         );
@@ -354,7 +357,7 @@ begin
             clk             => clk,
             r_enable        => sig_addr_res,
             w_enable        => dma_rb_wr_en,
-            rd_addr         => ag_addr_out,
+            rd_addr         => ofbuf_wr_addr_reg,
             wr_addr         => dma_rb_wr_addr,
             data_in         => dma_rb_wr_data,
             data_out        => res_data_out

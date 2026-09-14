@@ -14,14 +14,14 @@ use ieee.numeric_std.all;
 --
 --   CASO A: Conv3x3 + stride_en=1, tile de salida 2x2, UN solo tile.
 --           Activacion VARIA por FILA de imagen (no uniforme) -- elegido
---           a proposito para que el resultado sea DISTINTO entre la formula
---           correcta ( row = 2*y_counter + sig_ky ) y una formula con bug
---           que "olvide" escalar por stride ( row = y_counter + sig_ky ).
---           Con activacion uniforme ambas formulas coinciden por casualidad
---           en este tile tan chico -- ver el analisis completo mas abajo.
+--           a proposito para que el resultado distinga la ventana correcta
+--           ( TF SAME, row = 2*y_counter + sig_ky + 1 ) de la simetrica
+--           vieja ( row = 2*y_counter + sig_ky ) y de una formula que
+--           "olvide" escalar por stride. Con activacion uniforme coincidirian
+--           por casualidad en este tile tan chico -- ver el analisis mas abajo.
 --   CASO B: DW3x3 + stride_en=1, mismo tile 2x2, misma idea pero variando
 --           por COLUMNA en vez de por fila -- cubre la mitad del calculo
---           ( col = 2*x_counter + sig_kx ) que el Caso A no ejercita, y de
+--           ( col = 2*x_counter + sig_kx + 1 ) que el Caso A no ejercita, y de
 --           paso confirma que DW3x3 (addr_w por canal, no tocado en este
 --           cambio) sigue funcionando bien combinado con stride.
 --   CASO C: Conv3x3 + stride_en=1, DOS tiles horizontales ( TILE_WAIT ).
@@ -29,9 +29,9 @@ use ieee.numeric_std.all;
 --           "Hallazgo clave 1" en stride_support_gap.md ): el tile que pide
 --           el DMA ( DMA_TILE_W = doble del tile de salida, con halo ) y el
 --           tile que itera el acelerador ( MAX_X/MAX_Y, tamano de salida )
---           son registros independientes. Confirma ademas que tile1 lee su
---           halo IZQUIERDO como pixel real vecino (no cero, a diferencia
---           del halo del borde verdadero de la imagen) y que el OFM de
+--           son registros independientes. Confirma ademas que tile0 lee su
+--           halo DERECHO como pixel real de tile1 (no cero, a diferencia
+--           del pad del borde verdadero de la imagen) y que el OFM de
 --           ambos tiles queda escrito CONTIGUO en la imagen de salida
 --           ( sin hueco ni superposicion ) -- eso es lo que confirma que
 --           tile_w_out (mitad de tile_w, generalizacion de pool_en) quedo
@@ -52,6 +52,19 @@ use ieee.numeric_std.all;
 --           addr_generator.vhd no cambiaron en NADA el comportamiento ya
 --           verificado -- mismo resultado exacto (satura a 0x7F) que antes
 --           de tocar una sola linea de este cambio.
+--   CASOS F-I: ver el comentario de cada uno mas abajo.
+--   CASOS J-M ( agregados 2026-09-13, tras la primera corrida en placa, que
+--           destapo 4 bugs de RTL que la suite no detectaba ):
+--     J: Conv3x3 stride, 2 tiles VERTICALES -- el halo de ABAJO ( que con
+--        la ventana TF SAME si se lee ) trae la fila real del tile siguiente.
+--     K: Conv3x3 Cin=3 con un valor distinto por canal -- detecta byte_sel
+--        adelantado un ciclo respecto al dato de la BRAM ( bug 2 ).
+--     L: PW1x1 Cin=16 con canal c = c -- el mismo bug 2, en PW.
+--     M: PW1x1 + residual, Cout=32, residual distinto por pixel y grupo --
+--        detecta el residual leido con la direccion de la siguiente
+--        iteracion ( bug 4 ).
+--     ( El bug 3, el latch de sig_ky/sig_kx en addr_generator.vhd, no se ve
+--       en simulacion: solo en el methodology DRC post-implementacion. )
 --
 -- NOTA IMPORTANTE: stride_en es un registro que persiste entre capas
 -- ( no hay reset entre "run_layer_and_ack" ) -- por eso CADA caso escribe
@@ -60,19 +73,15 @@ use ieee.numeric_std.all;
 -- que necesita es el mismo que dejo el caso anterior. Nunca se asume el
 -- valor por defecto de reset ni el valor que dejo el caso previo.
 --
--- HALLAZGO DE DISENO (no es bug, descubierto al dimensionar el Caso A):
--- con stride_en='1', el DMA sigue fetcheando el mismo halo SIMETRICO de
--- siempre ( tile_h(core) + 2 filas, una arriba y una abajo -- ver
--- row_words_padded en ddr_addr_gen.vhd, sin tocar por este cambio ), pero
--- la formula de addr_generator.vhd ( row = 2*y_counter + sig_ky ) solo
--- necesita halo arriba -- la ultima fila fetcheada (indice tile_h_pad-1)
--- nunca se lee para ningun y_counter/sig_ky posible. Mismo razonamiento
--- aplica a la columna derecha. Es inofensivo (esa fila/columna de mas
--- simplemente no se usa, y en el borde real de la imagen igual se rellena
--- con cero por el mecanismo de zero-fill existente), pero es un desperdicio
--- de ancho de banda de 1 fila y 1 columna por tile con stride que no se
--- corrigio en este cambio -- queda documentado por si se quiere optimizar
--- despues.
+-- NOTA SOBRE EL HALO CON STRIDE: el DMA fetchea el halo SIMETRICO de
+-- siempre ( una fila/columna arriba-izquierda y una abajo-derecha, ver
+-- row_words_padded en ddr_addr_gen.vhd ). Con la ventana TF SAME
+-- ( row = 2*y_counter + sig_ky + 1 ) la fila 0 y la columna 0 del
+-- IFBuffer ( halo de arriba/izquierda ) nunca se leen, y el halo de
+-- abajo/derecha si: en tiles interiores trae el dato real del tile vecino
+-- ( Casos C y J ) y en el borde de la imagen, cero ( el pad de TF ). Hasta
+-- el 2026-09-13 la ventana era la simetrica 2y-1..2y+1 y era al reves: el
+-- halo de abajo/derecha era el que sobraba.
 --
 -- Direcciones: bloques de 0x4000 bytes por caso, mismo esquema que
 -- tb_cnn_top_hardcore.vhd, a partir de 0x40000 (para no chocar con ningun
@@ -163,7 +172,7 @@ architecture Behavioral of tb_cnn_top_stride is
 
     signal dma_done : std_logic;
 
-    constant DDR_WORDS : integer := 57600;
+    constant DDR_WORDS : integer := 65536;
     type ddr_mem_array is array( 0 to DDR_WORDS - 1 ) of std_logic_vector( 63 downto 0 );
 
     signal ddr_mem : ddr_mem_array := (
@@ -342,6 +351,50 @@ architecture Behavioral of tb_cnn_top_stride is
         57090 => x"FFFFFFD8FFFFFFD8", 57091 => x"FFFFFFD8FFFFFFD8",
         57092 => x"FFFFFFD8FFFFFFD8", 57093 => x"FFFFFFD8FFFFFFD8",
         57094 => x"FFFFFFD8FFFFFFD8", 57095 => x"FFFFFFD8FFFFFFD8",
+
+        -- CASO J ( Conv3x3 stride, 2 tiles verticales ). Imagen 4x8, Cin=16,
+        -- fila r = r+1 ( 1..8 ). Base IN word 57856 ( addr 0x71000 ), 8 words
+        -- por fila. bias = 0 ( addr 0x73800, word 59136 ).
+        57856 to 57863 => x"0101010101010101",
+        57864 to 57871 => x"0202020202020202",
+        57872 to 57879 => x"0303030303030303",
+        57880 to 57887 => x"0404040404040404",
+        57888 to 57895 => x"0505050505050505",
+        57896 to 57903 => x"0606060606060606",
+        57904 to 57911 => x"0707070707070707",
+        57912 to 57919 => x"0808080808080808",
+        59136 to 59143 => x"0000000000000000",
+
+        -- CASO K ( Conv3x3, Cin=3, 2x2 ). Canal c = c+1 en los 4 pixeles
+        -- ( 16 bytes/pixel, bytes 0-2 reales ). Base IN word 59904 ( addr
+        -- 0x75000 ). bias = 0 ( addr 0x77800, word 61184 ).
+        59904 => x"0000000000030201",
+        59906 => x"0000000000030201",
+        59908 => x"0000000000030201",
+        59910 => x"0000000000030201",
+        61184 to 61187 => x"0000000000000000",
+
+        -- CASO L ( PW1x1, Cin=16, 2x2 ). Canal c = c en los 4 pixeles. Base IN
+        -- word 61952 ( addr 0x79000 ). bias = 0 ( addr 0x7B800, word 63232 ).
+        61952 => x"0706050403020100", 61953 => x"0F0E0D0C0B0A0908",
+        61954 => x"0706050403020100", 61955 => x"0F0E0D0C0B0A0908",
+        61956 => x"0706050403020100", 61957 => x"0F0E0D0C0B0A0908",
+        61958 => x"0706050403020100", 61959 => x"0F0E0D0C0B0A0908",
+        63232 to 63239 => x"0000000000000000",
+
+        -- CASO M ( PW1x1 + residual, Cout=32, 2x2 ). Residual del pixel p,
+        -- grupo g = 10p + 40g + 5. 32 bytes/pixel ( 2 grupos de 16 ). Base RES
+        -- word 65024 ( addr 0x7F000 ). bias = 0 x 2 grupos ( addr 0x7F800,
+        -- word 65280 ).
+        65024 to 65025 => x"0505050505050505",
+        65026 to 65027 => x"2D2D2D2D2D2D2D2D",
+        65028 to 65029 => x"0F0F0F0F0F0F0F0F",
+        65030 to 65031 => x"3737373737373737",
+        65032 to 65033 => x"1919191919191919",
+        65034 to 65035 => x"4141414141414141",
+        65036 to 65037 => x"2323232323232323",
+        65038 to 65039 => x"4B4B4B4B4B4B4B4B",
+        65280 to 65295 => x"0000000000000000",
 
         others => x"0101010101010101" );
 
@@ -669,17 +722,17 @@ begin
         report "=== INICIO tb_cnn_top_stride: red densa con stride real + regresion ===";
 
         -- CASO A: Conv3x3 + stride_en=1, tile 2x2, activacion varia por
-        -- fila ( imgrow0=imgrow1=2, imgrow2=imgrow3=6 ). Formula real:
-        -- row = 2*y_counter + sig_ky.
-        --   y=0 ( row set {0,1,2}, row0=halo=0 ): filas validas = 2,2 -> 4.
-        --     x=0 (2 cols validas): sum=16*4*2=128. x=1 (3 cols validas):
-        --     sum=16*4*3=192.
-        --   y=1 ( row set {2,3,4}, todas reales ): filas = 2,6,6 -> 14.
-        --     x=0: sum=16*14*2=448. x=1: sum=16*14*3=672.
-        -- ( Si la formula NO escalara por stride -- bug de "olvidar" el
-        --   shift_left -- y=1 leeria filas {1,2,3}=2,2,6=10, dando sumas
-        --   distintas (320/480) -- este caso las distingue. )
-        -- shift=4 (division exacta): 128->8, 192->12, 448->28, 672->42.
+        -- fila ( imgrow0=imgrow1=2, imgrow2=imgrow3=6 ). Ventana TF SAME
+        -- ( padding="same", stride 2, entrada par ): la salida (y,x) lee
+        -- filas 2y..2y+2 y columnas 2x..2x+2 de la imagen -- pad 0
+        -- arriba/izquierda, 1 abajo/derecha. En el IFBuffer ( fila 0 = halo
+        -- de arriba ) eso es row = 2*y_counter + sig_ky + 1 ( fix 2026-09-13,
+        -- bug 1 de la primera corrida en placa: antes la ventana era la
+        -- simetrica 2y-1..2y+1 y este caso daba 8/12/28/42 ).
+        --   y=0 ( filas 0,1,2 ): 2+2+6 = 10.  y=1 ( filas 2,3 + pad ): 6+6 = 12.
+        --   x=0 ( cols 0,1,2 ): 3 validas.   x=1 ( cols 2,3 + pad ): 2 validas.
+        -- sum = 16 * suma_filas * cols, shift=4 (division exacta):
+        -- (0,0)=10*3=30, (0,1)=10*2=20, (1,0)=12*3=36, (1,1)=12*2=24.
         report "--- CASO A: Conv3x3 + stride_en=1, activacion varia por fila ---";
         cfg_accel( "00", 144, 1, 1, 0, 0, 0, 4, 0 );
         axi_write_accel( 68, x"00000001" ); -- REG_STRIDE_EN = 1.
@@ -687,21 +740,20 @@ begin
         axi_write_dma( 84, x"00000001" ); -- DMA_STRIDE_EN = 1.
         run_layer_and_ack;
 
-        check( ddr_mem( 33792 ), x"0808080808080808", "CasoA pixel(y=0,x=0) = 8" );
-        check( ddr_mem( 33794 ), x"0C0C0C0C0C0C0C0C", "CasoA pixel(y=0,x=1) = 12" );
-        check( ddr_mem( 33796 ), x"1C1C1C1C1C1C1C1C", "CasoA pixel(y=1,x=0) = 28" );
-        check( ddr_mem( 33798 ), x"2A2A2A2A2A2A2A2A", "CasoA pixel(y=1,x=1) = 42" );
+        check( ddr_mem( 33792 ), x"1E1E1E1E1E1E1E1E", "CasoA pixel(y=0,x=0) = 30" );
+        check( ddr_mem( 33794 ), x"1414141414141414", "CasoA pixel(y=0,x=1) = 20" );
+        check( ddr_mem( 33796 ), x"2424242424242424", "CasoA pixel(y=1,x=0) = 36" );
+        check( ddr_mem( 33798 ), x"1818181818181818", "CasoA pixel(y=1,x=1) = 24" );
         ack_dma_done;
-        report "=== CASO A OK (row = 2*y_counter + sig_ky verificado con datos que distinguen stride correcto de bug) ===";
+        report "=== CASO A OK (ventana TF SAME: row = 2*y_counter + sig_ky + 1) ===";
 
         -- CASO B: DW3x3 + stride_en=1, mismo tile 2x2, activacion varia
-        -- por COLUMNA ( imgcol0=imgcol1=3, imgcol2=imgcol3=9 ). Formula
-        -- real: col = 2*x_counter + sig_kx. DW3x3 es de un solo canal por
-        -- salida ( sin multiplicar por 16 ), asi que no hace falta shift.
-        --   x=0 (col set {0,1,2}, col0=halo=0): cols validas 3,3 -> 6.
-        --     y=0 (2 filas validas): 2*6=12. y=1 (3 filas validas): 3*6=18.
-        --   x=1 (col set {2,3,4}, todas reales): 3,9,9 -> 21.
-        --     y=0: 2*21=42. y=1: 3*21=63.
+        -- por COLUMNA ( imgcol0=imgcol1=3, imgcol2=imgcol3=9 ). Ventana TF
+        -- SAME: col = 2*x_counter + sig_kx + 1. DW3x3 es de un solo canal
+        -- por salida ( sin multiplicar por 16 ), asi que no hace falta shift.
+        --   x=0 ( cols 0,1,2 ): 3+3+9 = 15.  x=1 ( cols 2,3 + pad ): 9+9 = 18.
+        --   y=0 ( filas 0,1,2 ): 3 validas.  y=1 ( filas 2,3 + pad ): 2 validas.
+        -- (0,0)=3*15=45, (0,1)=3*18=54, (1,0)=2*15=30, (1,1)=2*18=36.
         report "--- CASO B: DW3x3 + stride_en=1, activacion varia por columna ---";
         cfg_accel( "01", 9, 1, 1, 0, 0, 0, 0, 0 );
         axi_write_accel( 68, x"00000001" ); -- REG_STRIDE_EN = 1.
@@ -709,24 +761,26 @@ begin
         axi_write_dma( 84, x"00000001" ); -- DMA_STRIDE_EN = 1.
         run_layer_and_ack;
 
-        check( ddr_mem( 35840 ), x"0C0C0C0C0C0C0C0C", "CasoB pixel(y=0,x=0) = 12" );
-        check( ddr_mem( 35842 ), x"2A2A2A2A2A2A2A2A", "CasoB pixel(y=0,x=1) = 42" );
-        check( ddr_mem( 35844 ), x"1212121212121212", "CasoB pixel(y=1,x=0) = 18" );
-        check( ddr_mem( 35846 ), x"3F3F3F3F3F3F3F3F", "CasoB pixel(y=1,x=1) = 63" );
+        check( ddr_mem( 35840 ), x"2D2D2D2D2D2D2D2D", "CasoB pixel(y=0,x=0) = 45" );
+        check( ddr_mem( 35842 ), x"3636363636363636", "CasoB pixel(y=0,x=1) = 54" );
+        check( ddr_mem( 35844 ), x"1E1E1E1E1E1E1E1E", "CasoB pixel(y=1,x=0) = 30" );
+        check( ddr_mem( 35846 ), x"2424242424242424", "CasoB pixel(y=1,x=1) = 36" );
         ack_dma_done;
-        report "=== CASO B OK (col = 2*x_counter + sig_kx verificado, DW3x3 + stride sin regresion) ===";
+        report "=== CASO B OK (col = 2*x_counter + sig_kx + 1, DW3x3 + stride) ===";
 
         -- CASO C: Conv3x3 + stride_en=1, DOS tiles horizontales. Activacion
         -- y pesos por defecto (=1) -- se verifica por CONTEO de taps
-        -- validos, igual estilo que el resto de la suite. tile0 es borde
-        -- izquierdo real (halo=0); tile1 NO es borde izquierdo -- su halo
-        -- izquierdo es el pixel real vecino de tile0 (dato REAL, no cero) --
-        -- eso es lo que hace que tile1(x=0) de un conteo distinto a
-        -- tile0(x=0), confirmando que el DMA decodifico bien el limite
-        -- entre tiles con stride.
-        --   filas validas: y=0 -> 2, y=1 -> 3 (igual en ambos tiles).
-        --   cols validas: tile0 x=0 -> 2, tile0 x=1 -> 3 (borde real).
-        --                 tile1 x=0 -> 3, tile1 x=1 -> 3 (sin cero real).
+        -- validos, igual estilo que el resto de la suite. Imagen 8x4 ->
+        -- salida 4x2, tile de salida 2x2. Con la ventana TF SAME la salida
+        -- global X lee las columnas 2X..2X+2:
+        --   tile0 x=0 ( cols 0,1,2 ) -> 3.
+        --   tile0 x=1 ( cols 2,3,4 ) -> 3: la col 4 es de tile1 y llega por
+        --     el halo DERECHO de tile0 ( dato REAL -- si el DMA la llenara
+        --     con cero daria 2 ). Confirma que el DMA decodifico bien el
+        --     limite entre tiles con stride.
+        --   tile1 x=0 ( cols 4,5,6 ) -> 3.
+        --   tile1 x=1 ( cols 6,7 + pad ) -> 2 ( borde derecho real ).
+        --   filas validas: y=0 -> 3, y=1 -> 2 (igual en ambos tiles).
         -- sum = 16 * filas * cols, shift=4 (division exacta).
         report "--- CASO C: Conv3x3 + stride_en=1, 2 tiles horizontales (TILE_WAIT) ---";
         cfg_accel( "00", 144, 1, 1, 0, 0, 0, 4, 0 );
@@ -738,28 +792,28 @@ begin
         axi_write_dma( 84, x"00000001" ); -- DMA_STRIDE_EN = 1.
         run_layer_and_ack;
 
-        report "--- tile0 (borde izquierdo real -> halo=0) ---";
-        check( ddr_mem( 37888 ), x"0404040404040404", "CasoC tile0(y=0,x=0) = 4" );
-        check( ddr_mem( 37890 ), x"0606060606060606", "CasoC tile0(y=0,x=1) = 6" );
+        report "--- tile0 (halo derecho = pixel real de tile1, no cero) ---";
+        check( ddr_mem( 37888 ), x"0909090909090909", "CasoC tile0(y=0,x=0) = 9" );
+        check( ddr_mem( 37890 ), x"0909090909090909", "CasoC tile0(y=0,x=1) = 9 (halo derecho real, no 6)" );
         check( ddr_mem( 37896 ), x"0606060606060606", "CasoC tile0(y=1,x=0) = 6" );
-        check( ddr_mem( 37898 ), x"0909090909090909", "CasoC tile0(y=1,x=1) = 9" );
+        check( ddr_mem( 37898 ), x"0606060606060606", "CasoC tile0(y=1,x=1) = 6 (real, no 4)" );
 
-        report "--- tile1 (halo izquierdo = pixel real vecino, no cero) ---";
-        check( ddr_mem( 37892 ), x"0606060606060606", "CasoC tile1(y=0,x=0) = 6 (real, no 4)" );
+        report "--- tile1 (borde derecho real de la imagen -> pad = 0) ---";
+        check( ddr_mem( 37892 ), x"0909090909090909", "CasoC tile1(y=0,x=0) = 9" );
         check( ddr_mem( 37894 ), x"0606060606060606", "CasoC tile1(y=0,x=1) = 6" );
-        check( ddr_mem( 37900 ), x"0909090909090909", "CasoC tile1(y=1,x=0) = 9 (real, no 6)" );
-        check( ddr_mem( 37902 ), x"0909090909090909", "CasoC tile1(y=1,x=1) = 9" );
+        check( ddr_mem( 37900 ), x"0606060606060606", "CasoC tile1(y=1,x=0) = 6" );
+        check( ddr_mem( 37902 ), x"0404040404040404", "CasoC tile1(y=1,x=1) = 4" );
         ack_dma_done;
         report "=== CASO C OK (DMA_TILE_W desacoplado de MAX_X/MAX_Y verificado con 2 tiles reales) ===";
 
         -- CASO D: cadena real Conv3x3(stride=2) -> DW3x3(stride=1), igual
         -- patron que conv1 -> siguiente capa en MobileNetV2 real. Capa 1
-        -- igual al Caso C con UN tile (mismos conteos de taps: 4,6,6,9).
-        -- Capa 2 consume la salida REAL de Capa 1 como imagen 2x2 --
-        -- con solo 2x2 pixeles y kernel 3x3, CUALQUIER posicion de salida
-        -- termina sumando los 4 pixeles reales (caso degenerado, ver nota
-        -- en el header del archivo) -> las 4 salidas dan el mismo valor:
-        -- 4+6+6+9=25, +bias3=28, shift=0.
+        -- igual al Caso C con UN tile ( la col 4 y la fila 4 son pad ):
+        -- conteos 9,6,6,4. Capa 2 consume la salida REAL de Capa 1 como
+        -- imagen 2x2 -- con solo 2x2 pixeles y kernel 3x3, CUALQUIER
+        -- posicion de salida termina sumando los 4 pixeles reales (caso
+        -- degenerado) -> las 4 salidas dan el mismo valor: 9+6+6+4=25,
+        -- +bias3=28, shift=0.
         report "--- CASO D: cadena Conv3x3(stride=2) -> DW3x3(stride=1), datos reales propagados ---";
 
         report "--- Capa 1 (Conv3x3, stride_en=1) ---";
@@ -769,10 +823,10 @@ begin
         axi_write_dma( 84, x"00000001" ); -- DMA_STRIDE_EN = 1.
         run_layer_and_ack;
 
-        check( ddr_mem( 39936 ), x"0404040404040404", "CasoD capa1(y=0,x=0) = 4" );
+        check( ddr_mem( 39936 ), x"0909090909090909", "CasoD capa1(y=0,x=0) = 9" );
         check( ddr_mem( 39938 ), x"0606060606060606", "CasoD capa1(y=0,x=1) = 6" );
         check( ddr_mem( 39940 ), x"0606060606060606", "CasoD capa1(y=1,x=0) = 6" );
-        check( ddr_mem( 39942 ), x"0909090909090909", "CasoD capa1(y=1,x=1) = 9" );
+        check( ddr_mem( 39942 ), x"0404040404040404", "CasoD capa1(y=1,x=1) = 4" );
         ack_dma_done;
 
         report "--- Capa 2 (DW3x3, stride_en=0 -- IN = OUT real de capa 1) ---";
@@ -973,6 +1027,114 @@ begin
         check( ddr_mem( 56326 ), x"E8E8E8E8E8E8E8E8", "CasoI pixel(1,1) = -24" );
         ack_dma_done;
         report "=== CASO I: ver arriba OK/FALLO (relu_en=0 preserva los negativos) ===";
+
+        -- CASO J: Conv3x3 + stride_en=1, DOS tiles VERTICALES. Imagen 4x8,
+        -- activacion por FILA: fila r = r+1 ( 1..8 ). Salida 2x4 ( tile de
+        -- salida 2x2, MAX_TILE_Y=1 ). La salida Y lee las filas 2Y..2Y+2:
+        --   Y=0: 1+2+3 = 6.
+        --   Y=1: 3+4+5 = 12 -- la fila 4 es del tile 1 y llega por el halo de
+        --        ABAJO del tile 0 ( con cero daria 7 ). conv1 real tiene 32
+        --        tiles verticales: este halo se usa en todos menos el ultimo.
+        --   Y=2: 5+6+7 = 18.
+        --   Y=3: 7+8   = 15 ( borde de abajo real -> pad = 0 ).
+        --   cols: X=0 -> 3, X=1 -> 2.  sum = 16*suma_filas*cols, shift=4.
+        report "--- CASO J: Conv3x3 + stride_en=1, 2 tiles verticales (halo de abajo real) ---";
+        cfg_accel( "00", 144, 1, 1, 0, 0, 0, 4, 0 );
+        axi_write_accel( 32, x"00000001" ); -- MAX_TILE_Y = 1 ( 2 tiles ).
+        axi_write_accel( 68, x"00000001" ); -- REG_STRIDE_EN = 1.
+        cfg_dma( 4, 0, 144, 16#70000#, 16#71000#, 16#72000#, 16#73000#, 0, 0, 4, 16#73800# );
+        axi_write_dma( 20, x"00000008" ); -- DMA_IMG_H = 8 ( override ).
+        axi_write_dma( 36, x"00000002" ); -- DMA_NUM_TILE_Y = 2 ( override ).
+        axi_write_dma( 84, x"00000001" ); -- DMA_STRIDE_EN = 1.
+        run_layer_and_ack;
+
+        check( ddr_mem( 58368 ), x"1212121212121212", "CasoJ pixel(Y=0,X=0) = 18" );
+        check( ddr_mem( 58370 ), x"0C0C0C0C0C0C0C0C", "CasoJ pixel(Y=0,X=1) = 12" );
+        check( ddr_mem( 58372 ), x"2424242424242424", "CasoJ pixel(Y=1,X=0) = 36 (halo de abajo real, no 21)" );
+        check( ddr_mem( 58374 ), x"1818181818181818", "CasoJ pixel(Y=1,X=1) = 24 (halo de abajo real, no 14)" );
+        check( ddr_mem( 58376 ), x"3636363636363636", "CasoJ pixel(Y=2,X=0) = 54" );
+        check( ddr_mem( 58378 ), x"2424242424242424", "CasoJ pixel(Y=2,X=1) = 36" );
+        check( ddr_mem( 58380 ), x"2D2D2D2D2D2D2D2D", "CasoJ pixel(Y=3,X=0) = 45" );
+        check( ddr_mem( 58382 ), x"1E1E1E1E1E1E1E1E", "CasoJ pixel(Y=3,X=1) = 30" );
+        ack_dma_done;
+        report "=== CASO J: ver arriba OK/FALLO (halo de abajo entre tiles con stride) ===";
+
+        -- CASO K: Conv3x3, Cin=3, imagen 2x2, canal c = c+1 ( 1,2,3 ) en los
+        -- 4 pixeles, pesos = 1. Cada pixel tiene 4 taps validos -> 4*6 = 24.
+        -- Detecta el bug 2 ( byte_sel sin registrar vs la latencia de 1 ciclo
+        -- de la BRAM del IFBuffer ): el tap (2,2) de cada canal leia el canal
+        -- ci+1 ( el ultimo recortado ) -> el pixel (0,0), el unico cuyo tap
+        -- (2,2) cae dentro de la imagen, daba 24 - 6 + (2+3+3) = 26. Los
+        -- otros 3 no lo ven ( su tap (2,2) es pad = 0 ).
+        report "--- CASO K: Conv3x3 Cin=3, valor distinto por canal (byte_sel) ---";
+        cfg_accel( "00", 27, 1, 1, 0, 0, 0, 0, 0 );
+        axi_write_accel(  8, x"00000003" ); -- REG_CIN = 3 ( override ).
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 ( explicito ).
+        cfg_dma( 2, 0, 27, 16#74000#, 16#75000#, 16#76000#, 16#77000#, 0, 0, 4, 16#77800# );
+        axi_write_dma(  8, x"00000003" ); -- DMA_CIN = 3 ( override ).
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 ( explicito ).
+        run_layer_and_ack;
+
+        check( ddr_mem( 60416 ), x"1818181818181818", "CasoK pixel(0,0) = 24 (con bug byte_sel daba 26)" );
+        check( ddr_mem( 60418 ), x"1818181818181818", "CasoK pixel(0,1) = 24" );
+        check( ddr_mem( 60420 ), x"1818181818181818", "CasoK pixel(1,0) = 24" );
+        check( ddr_mem( 60422 ), x"1818181818181818", "CasoK pixel(1,1) = 24" );
+        ack_dma_done;
+        report "=== CASO K: ver arriba OK/FALLO (byte_sel alineado con el dato en Conv3x3) ===";
+
+        -- CASO L: PW1x1, Cin=16, imagen 2x2, canal c = c ( 0..15 ), pesos = 1
+        -- -> 0+1+..+15 = 120. Con el bug 2 cada canal leia el siguiente ( el
+        -- ultimo recortado ) -> 1+..+15+15 = 135 -> satura a 127.
+        report "--- CASO L: PW1x1 Cin=16, canal c = c (byte_sel) ---";
+        cfg_accel( "10", 16, 1, 1, 0, 0, 0, 0, 0 );
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 ( explicito ).
+        cfg_dma( 2, 0, 16, 16#78000#, 16#79000#, 16#7A000#, 16#7B000#, 0, 0, 4, 16#7B800# );
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 ( explicito ).
+        run_layer_and_ack;
+
+        check( ddr_mem( 62464 ), x"7878787878787878", "CasoL pixel(0,0) = 120 (con bug byte_sel saturaba a 127)" );
+        check( ddr_mem( 62466 ), x"7878787878787878", "CasoL pixel(0,1) = 120" );
+        check( ddr_mem( 62468 ), x"7878787878787878", "CasoL pixel(1,0) = 120" );
+        check( ddr_mem( 62470 ), x"7878787878787878", "CasoL pixel(1,1) = 120" );
+        ack_dma_done;
+        report "=== CASO L: ver arriba OK/FALLO (byte_sel alineado con el dato en PW1x1) ===";
+
+        -- CASO M: PW1x1 + Residual, Cin=16, Cout=32 ( 2 grupos ), imagen 2x2.
+        -- sum = 16 ( pesos y activacion = 1 ), bias 0 -> 16 antes del
+        -- residual. Residual distinto por pixel p y grupo g: 10p + 40g + 5.
+        -- Salida = 16 + residual. Detecta el bug 4 ( residual_buf leido con
+        -- ag_addr_out en vivo, que en POST ya avanzo a la siguiente
+        -- iteracion ): el grupo 0 recibia el residual del grupo 1 del mismo
+        -- pixel y el grupo 1 el del grupo 0 del pixel siguiente ( el mismo
+        -- patron que se midio en la placa ). weight_words = 32 y bias de 2
+        -- grupos, igual que el Caso H ( max_co = 1 ).
+        report "--- CASO M: PW1x1 + Residual, Cout=32, residual distinto por pixel y grupo ---";
+        cfg_accel( "10", 16, 1, 1, 1, 0, 0, 0, 0 );
+        axi_write_accel( 16, x"00000001" ); -- REG_MAX_CO = 1 ( Cout=32 ).
+        axi_write_accel( 68, x"00000000" ); -- REG_STRIDE_EN = 0 ( explicito ).
+        cfg_dma( 2, 1, 32, 16#7C000#, 16#7D000#, 16#7E000#, 16#7F000#, 0, 0, 8, 16#7F800# );
+        axi_write_dma( 12, x"00000020" ); -- DMA_COUT = 32 ( override ).
+        axi_write_dma( 84, x"00000000" ); -- DMA_STRIDE_EN = 0 ( explicito ).
+        run_layer_and_ack;
+
+        check( ddr_mem( 64512 ), x"1515151515151515", "CasoM pixel0 grupo0 canales 0-7 = 16+5 = 21" );
+        check( ddr_mem( 64513 ), x"1515151515151515", "CasoM pixel0 grupo0 canales 8-15 = 16+5 = 21" );
+        check( ddr_mem( 64514 ), x"3D3D3D3D3D3D3D3D", "CasoM pixel0 grupo1 canales 16-23 = 16+45 = 61" );
+        check( ddr_mem( 64515 ), x"3D3D3D3D3D3D3D3D", "CasoM pixel0 grupo1 canales 24-31 = 16+45 = 61" );
+        check( ddr_mem( 64516 ), x"1F1F1F1F1F1F1F1F", "CasoM pixel1 grupo0 canales 0-7 = 16+15 = 31" );
+        check( ddr_mem( 64517 ), x"1F1F1F1F1F1F1F1F", "CasoM pixel1 grupo0 canales 8-15 = 16+15 = 31" );
+        check( ddr_mem( 64518 ), x"4747474747474747", "CasoM pixel1 grupo1 canales 16-23 = 16+55 = 71" );
+        check( ddr_mem( 64519 ), x"4747474747474747", "CasoM pixel1 grupo1 canales 24-31 = 16+55 = 71" );
+        check( ddr_mem( 64520 ), x"2929292929292929", "CasoM pixel2 grupo0 canales 0-7 = 16+25 = 41" );
+        check( ddr_mem( 64521 ), x"2929292929292929", "CasoM pixel2 grupo0 canales 8-15 = 16+25 = 41" );
+        check( ddr_mem( 64522 ), x"5151515151515151", "CasoM pixel2 grupo1 canales 16-23 = 16+65 = 81" );
+        check( ddr_mem( 64523 ), x"5151515151515151", "CasoM pixel2 grupo1 canales 24-31 = 16+65 = 81" );
+        check( ddr_mem( 64524 ), x"3333333333333333", "CasoM pixel3 grupo0 canales 0-7 = 16+35 = 51" );
+        check( ddr_mem( 64525 ), x"3333333333333333", "CasoM pixel3 grupo0 canales 8-15 = 16+35 = 51" );
+        check( ddr_mem( 64526 ), x"5B5B5B5B5B5B5B5B", "CasoM pixel3 grupo1 canales 16-23 = 16+75 = 91" );
+        check( ddr_mem( 64527 ), x"5B5B5B5B5B5B5B5B", "CasoM pixel3 grupo1 canales 24-31 = 16+75 = 91" );
+        ack_dma_done;
+        report "=== CASO M: ver arriba OK/FALLO (residual alineado con la iteracion que se cierra) ===";
 
         report "=== RESUMEN: " & integer'image( errors ) & " fallo(s) ===" severity note;
         if( errors = 0 ) then

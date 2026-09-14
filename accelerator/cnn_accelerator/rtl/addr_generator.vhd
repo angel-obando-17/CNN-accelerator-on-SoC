@@ -103,8 +103,8 @@ begin
     begin
         if( reset = '1' ) then
             sig_ci <= ( others => '0' );
-            sig_ky <= ky_kx_reset_val;
-            sig_kx <= ky_kx_reset_val;
+            sig_ky <= ( others => '0' );
+            sig_kx <= ( others => '0' );
         elsif( rising_edge( clk ) ) then
 
             if( sig_counter_reset = '1' ) then
@@ -208,8 +208,8 @@ begin
         -- addr_in
         
         if( stride_en = '1' ) then
-            row := shift_left( resize( unsigned( y_counter ), 4 ), 1 ) + resize( sig_ky, 4 );
-            col := shift_left( resize( unsigned( x_counter ), 8 ), 1 ) + resize( sig_kx, 8 );
+            row := shift_left( resize( unsigned( y_counter ), 4 ), 1 ) + resize( sig_ky, 4 ) + 1;
+            col := shift_left( resize( unsigned( x_counter ), 8 ), 1 ) + resize( sig_kx, 8 ) + 1;
         else
             row := resize( unsigned( y_counter ), 4 ) + resize( sig_ky, 4 );
             col := resize( unsigned( x_counter ), 8 ) + resize( sig_kx, 8 );    

@@ -5,6 +5,7 @@
 
 /.vscode
 /.claude
+/.Xil/
 /CNN/data/raw
 /CNN/data/segmentado_unet
 /CNN/results/legacy/resultados_experimentos/segmentacion/pares
@@ -12,6 +13,7 @@
 /CNN/src/training/legacy/evaluate.py
 /CNN/src/__pycache__
 /runtime_bare_metal/.vscode
+/runtime_bare_metal/Packages
 /runtime_bare_metal/vitis_ws
 /architecture_pl/
 /dma
