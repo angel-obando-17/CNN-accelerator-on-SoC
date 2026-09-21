@@ -20,6 +20,10 @@
 /* This value is hardcoded with the reference of ptq_simple_v2/layer_quant_params.json */
 #define GAP_SCALE		0.029560492733332114
 
+static inline void sev( void ) {
+	__asm__ __volatile__( "sev" );
+}
+
 static const char* const classes[ NUM_CLASSES ] = { "Tomato_Bacterial_spot", 
 								     				"Tomato_Early_blight", 
 													"Tomato_Late_blight", 
@@ -157,6 +161,7 @@ int main( void ) {
 	ocm_mailbox_ptr -> seg_done = 0x0u;
 	ocm_mailbox_ptr -> frame_id = FRAME_ID_NONE;
 	ocm_mailbox_ptr -> status = 0x0u;
+	ocm_mailbox_ptr -> core1_ready = 0x0u;
 
 	XScuGic_Config* Gic_Config = XScuGic_LookupConfig( XPAR_SCUGIC_0_DEVICE_ID );
 
@@ -179,6 +184,10 @@ int main( void ) {
 	XScuGic_Enable( &Gic_Handler, SGI_CORE1_TO_CORE0 );
 
 	Xil_ExceptionEnable( );
+
+	Xil_Out32( CPU1_START_MEM, CORE1_START_ADDRESS );
+	dsb( );
+	sev( );
 
 	FRESULT mount_status = f_mount( &Fat_Instance, "0:/", 1 );
 	if( mount_status != FR_OK ) {
@@ -203,6 +212,8 @@ int main( void ) {
 	flush_model_data( layer_table, &sizes );
 	if( layer_table[ 0 ].dma_addr_in != PACKAGE_FRAME_ADDRESS )
 		while( 1 );
+
+	while( !ocm_mailbox_ptr -> core1_ready );
 
 	FRESULT dir_status;
 	uint32_t current_id = FRAME_ID_NONE;

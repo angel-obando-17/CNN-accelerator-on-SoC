@@ -30,6 +30,7 @@ static void notify_core0( XScuGic* gic_ptr, struct ocm_mailbox_t* const mailbox_
 int main( void ) {
     init_tables( );
     Xil_SetTlbAttributes( (INTPTR) OCM_MAILBOX_BASE, NORM_NONCACHE );
+    struct ocm_mailbox_t* const ocm_mailbox_ptr = ocm_pointer( );
 
     XScuGic_Config* Gic_Config = XScuGic_LookupConfig( XPAR_SCUGIC_0_DEVICE_ID );
     
@@ -53,7 +54,9 @@ int main( void ) {
     
     Xil_ExceptionEnable( );
 
-    struct ocm_mailbox_t* const ocm_mailbox_ptr = ocm_pointer( );
+    ocm_mailbox_ptr -> core1_ready = 0x1u;
+    dsb( );
+
     uint32_t last_id = FRAME_ID_NONE;
     while( 1 ) {
         while( !Handler_Flag );
