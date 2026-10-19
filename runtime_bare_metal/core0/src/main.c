@@ -4,12 +4,14 @@
 #include "dma_driver.h"
 #include "cnn_driver.h"
 #include "layer_table.h"
+#include "sw_inference.h"
 
 #include "xil_mmu.h"
 #include "xil_cache.h"
 #include "xscugic.h"
 #include "xil_exception.h"
 #include "xparameters.h"
+#include "xtime_l.h"
 #include "xil_printf.h"
 #include "ff.h"
 
@@ -251,9 +253,32 @@ int main( void ) {
 		}
 
 		Xil_DCacheFlushRange( (INTPTR) PACKAGE_FRAME_ADDRESS, PACKAGE_FRAME_LENGTH );
+
+		XTime hw_start;
+		XTime hw_end;
+
+		XTime_GetTime( &hw_start );
 		run_network( layer_table );
+		XTime_GetTime( &hw_end );
+
+		uint32_t microseconds_hw = ( hw_end - hw_start ) * 1000000 / COUNTS_PER_SECOND;
 
 		Xil_DCacheInvalidateRange( (INTPTR) layer_table[ NUM_LAYERS - 1 ].dma_addr_out, GAP_CHANNELS );
+
+		int8_t sw_gap[ GAP_CHANNELS ];
+		XTime sw_start;
+		XTime sw_end;
+
+		XTime_GetTime( &sw_start );
+		sw_inference_run( layer_table, (const int8_t*) PACKAGE_FRAME_ADDRESS, sw_gap );
+		XTime_GetTime( &sw_end );
+
+		uint32_t microseconds_sw = ( sw_end - sw_start ) * 1000000 / COUNTS_PER_SECOND;
+
+		if( memcmp( layer_table[ NUM_LAYERS - 1 ].dma_addr_out, sw_gap, GAP_CHANNELS ) == 0 )
+			xil_printf( "Results are equals.\n	" );
+		else
+			xil_printf( "Results are no equals.\n" );
 
 		uint8_t index_class = classify(
 			(const int8_t*) layer_table[ NUM_LAYERS - 1 ].dma_addr_out,
@@ -262,6 +287,8 @@ int main( void ) {
 
 		xil_printf( "Image File: %s\n", current_file.fname );
 		xil_printf( "Clase: %s\n", classes[ index_class ] );
+		xil_printf( "HW_Time: %u us\n", microseconds_hw );
+		xil_printf( "SW_Time: %u us\n", microseconds_sw );
 	}
 	f_closedir( &current_dir );
 

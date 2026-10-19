@@ -69,10 +69,9 @@ static int32_t accumulate( const struct layer_config_t* cfg, const int8_t* in, u
 			}
 			break;
 		case MODE_PW1X1:
-			for( uint8_t ci = 0; ci < cin; ci++ ) {
+			for( uint8_t ci = 0; ci < cin; ci++ )
 				acc += in[ act_offset( out_y, out_x, ci, in_w, cin ) ] *
 					   weight_at( weights, weight_word( MODE_PW1X1, co, ci, 0, 0, cin ), cout );
-			}
 			break;
 		default:
 			break;
@@ -176,4 +175,3 @@ void sw_inference_run( const struct layer_config_t* table, const int8_t* frame, 
 			run_layer( cfg, in, res, out );
 	}
 }
-
