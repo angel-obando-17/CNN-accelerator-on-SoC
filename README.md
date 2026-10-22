@@ -66,6 +66,8 @@ Bitacora.md                          # development log
 - [x] Verified in simulation, including a documented set of timing-bug fixes
 - [x] Hardware bring-up on physical Zynq-7020 board (PUZHI PZ7020-Starlite)
 - [x] End-to-end inference running on real hardware
+- [x] Standalone boot from SD card (dual-core, no JTAG/debugger required)
+- [ ] LCD display driver to show each inference result with measured HW vs. SW execution times (in progress)
 - [ ] Power consumption measurements
 - [ ] Large-batch validation on hardware (accuracy, latency, and throughput over a large image set)
 
