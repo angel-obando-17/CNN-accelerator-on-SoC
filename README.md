@@ -2,13 +2,19 @@
 
 Full hardware/software co-design of a CNN inference accelerator, built from RTL up on a Xilinx Zynq-7020 SoC. Custom VHDL processing array, AXI-based DMA, and a bare-metal ARM runtime — running a quantized MobileNetV2 for real-time plant disease classification.
 
-> Undergraduate thesis project · 2026 · In active development
+> Undergraduate thesis project · 2026 · Running on real hardware — final validation stage
 
 ## Overview
 
 This project implements a complete pipeline for deploying a quantized CNN on a Zynq-7020: the Programmable Logic (PL) side computes convolutions using a custom 16-wide MAC array, while a bare-metal application on the dual-core ARM Cortex-A9 (Processing System, PS) handles scheduling, DMA transfers, and layer orchestration.
 
-The model — MobileNetV2, trained and quantized to INT8 — reaches **94.14% accuracy on the PlantVillage dataset**, running entirely on custom hardware rather than a general-purpose NN accelerator IP.
+The model — MobileNetV2, trained and quantized to INT8 — reaches **94.14% accuracy on the PlantVillage dataset**, running entirely on custom hardware rather than a general-purpose NN accelerator IP. The full design has been brought up and verified on a physical Zynq-7020 board.
+
+## Hardware platform
+
+The accelerator was developed and tested on the **PUZHI PZ7020-Starlite** development board (Xilinx Zynq-7020).
+
+![Accelerator running on the PZ7020-Starlite](images/board_running.jpg)
 
 ## Key features
 
@@ -51,16 +57,17 @@ Bitacora.md                          # development log
 
 ## Tech stack
 
-`VHDL` · `Python` (training/quantization) · `Vivado` · `Zynq-7020` · `ARM Cortex-A9 (bare-metal)` · `AXI-Lite/AXI-HP` · `DMA`
+`VHDL` · `Python` (training/quantization) · `Vivado` · `Vitis` · `Zynq-7020` · `ARM Cortex-A9 (bare-metal, dual-core)` · `AXI-Lite/AXI-HP` · `DMA`
 
 ## Status
 
 - [x] MAC array, Address Generator, quant_relu, and pooling units implemented in VHDL
 - [x] MobileNetV2 trained and quantized to INT8 (94.14% accuracy, PlantVillage)
 - [x] Verified in simulation, including a documented set of timing-bug fixes
-- [ ] Hardware bring-up on physical Zynq-7020 board
-- [ ] End-to-end latency / throughput benchmarking on real hardware
-
+- [x] Hardware bring-up on physical Zynq-7020 board (PUZHI PZ7020-Starlite)
+- [x] End-to-end inference running on real hardware
+- [ ] Power consumption measurements
+- [ ] Large-batch validation on hardware (accuracy, latency, and throughput over a large image set)
 
 ## Engineering notes
 
