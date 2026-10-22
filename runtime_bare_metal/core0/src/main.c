@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 
 #include "intercore.h"
@@ -5,6 +6,7 @@
 #include "cnn_driver.h"
 #include "layer_table.h"
 #include "sw_inference.h"
+#include "lcd_driver.h"
 
 #include "xil_mmu.h"
 #include "xil_cache.h"
@@ -36,6 +38,17 @@ static const char* const classes[ NUM_CLASSES ] = { "Tomato_Bacterial_spot",
 													"Tomato__Tomato_YellowLeaf__Curl_Virus", 
 													"Tomato_healthy" 
 												  };
+
+static const char* const lcd_classes[ NUM_CLASSES ] = { "Bacterial Spot",
+														"Early Blight",
+														"Late Blight",
+														"Leaf Mold",
+														"Septoria Leaf Spot",
+														"Spider Mites",
+														"Target Spot",
+														"Yellow Leaf Curl",
+														"Healthy"
+													  };
 
 static XScuGic Gic_Handler;
 static volatile uint32_t Handler_Flag = 0x0u;
@@ -196,7 +209,26 @@ int main( void ) {
 		xil_printf( "Fail Mount Error: %d\n", mount_status );
 		while( 1 );
 	}
-	
+
+	bool lcd_ready = false;
+	int status = lcd_i2c_init( );
+	if( status != XST_SUCCESS )
+		xil_printf( "WARNING: LCD I2C Init Failed.\n" );
+	else if( lcd_i2c_scan( ) == 0 )
+		xil_printf( "WARNING: No I2C Device Found.\n" );
+	else {
+		status = lcd_init( );
+		if( status == XST_SUCCESS )
+			lcd_ready = true;
+		else
+			xil_printf( "WARNING: Failed Init LCD I2C.\n" );
+	}
+
+	if( lcd_ready ) {
+		lcd_set_cursor( 0, 0 );
+		lcd_print( "Loading Model..." );
+	}
+
 	const struct data_sizes sizes = calculate_sizes( layer_table );
 	load_file( "WEIGHTS.bin", layer_table[ 0 ].dma_addr_w, sizes.weights_size );
 	load_file( "BIAS.bin", layer_table[ 0 ].dma_addr_bias, sizes.bias_size );
@@ -275,8 +307,8 @@ int main( void ) {
 
 		uint32_t microseconds_sw = ( sw_end - sw_start ) * 1000000 / COUNTS_PER_SECOND;
 
-		if( memcmp( layer_table[ NUM_LAYERS - 1 ].dma_addr_out, sw_gap, GAP_CHANNELS ) == 0 )
-			xil_printf( "Results are equals.\n	" );
+		if( memcmp( (const void*) layer_table[ NUM_LAYERS - 1 ].dma_addr_out, sw_gap, GAP_CHANNELS ) == 0 )
+			xil_printf( "Results are equals.\n" );
 		else
 			xil_printf( "Results are no equals.\n" );
 
@@ -289,6 +321,24 @@ int main( void ) {
 		xil_printf( "Clase: %s\n", classes[ index_class ] );
 		xil_printf( "HW_Time: %u us\n", microseconds_hw );
 		xil_printf( "SW_Time: %u us\n", microseconds_sw );
+
+		if( lcd_ready ) {
+			char buffer[ 21 ];
+
+			lcd_clear( );
+			lcd_set_cursor( 0, 0 );
+			lcd_print( current_file.fname );
+			lcd_set_cursor( 1, 0 );
+			lcd_print( lcd_classes[ index_class ] );
+
+			snprintf( buffer, sizeof( buffer ), "HW: %lu.%02lu ms", microseconds_hw / 1000, ( microseconds_hw % 1000 ) / 10 );
+			lcd_set_cursor( 2, 0 );
+			lcd_print( buffer );
+
+			snprintf( buffer, sizeof( buffer ), "SW: %lu.%02lu ms", microseconds_sw / 1000, ( microseconds_sw % 1000 ) / 10 );
+			lcd_set_cursor( 3, 0 );
+			lcd_print( buffer );
+		}
 	}
 	f_closedir( &current_dir );
 
