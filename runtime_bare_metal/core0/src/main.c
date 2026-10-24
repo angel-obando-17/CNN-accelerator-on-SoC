@@ -214,8 +214,6 @@ int main( void ) {
 	int status = lcd_i2c_init( );
 	if( status != XST_SUCCESS )
 		xil_printf( "WARNING: LCD I2C Init Failed.\n" );
-	else if( lcd_i2c_scan( ) == 0 )
-		xil_printf( "WARNING: No I2C Device Found.\n" );
 	else {
 		status = lcd_init( );
 		if( status == XST_SUCCESS )

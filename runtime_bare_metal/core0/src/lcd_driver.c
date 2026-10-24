@@ -24,14 +24,27 @@
 #define LCD_INIT_8BIT			0x03U
 #define LCD_INIT_4BIT			0x02U
 
+#define LCD_I2C_BUS_TIMEOUT		1000U
+
 static XIicPs Iic_Instance;
+
+static int i2c_wait_bus_free( void ) {
+	for( uint32_t counter = 0; counter < LCD_I2C_BUS_TIMEOUT; counter++ ) {
+		if( !XIicPs_BusIsBusy( &Iic_Instance ) )
+			return XST_SUCCESS;
+		usleep( 10 );
+	}
+
+	return XST_FAILURE;
+}
 
 static int i2c_send( uint8_t address, uint8_t value ) {
 	int status = XIicPs_MasterSendPolled( &Iic_Instance, &value, 1, address );
 
-	while( XIicPs_BusIsBusy( &Iic_Instance ) );
+	int bus_status = i2c_wait_bus_free( );
+	CHECK_STATUS( status, XST_SUCCESS );
 
-	return status;
+	return bus_status;
 }
 
 int lcd_i2c_init( void ) {
@@ -45,7 +58,7 @@ int lcd_i2c_init( void ) {
 	if( XIicPs_SetSClk( &Iic_Instance, LCD_I2C_SCLK_HZ ) != XST_SUCCESS )
 		return XST_FAILURE;
 
-	return XST_SUCCESS;
+	return i2c_wait_bus_free( );
 }
 
 int lcd_i2c_scan( void ) {
